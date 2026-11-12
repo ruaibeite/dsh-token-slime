@@ -44,8 +44,6 @@ window.__ModuleLoader__.load({
     const MOLT_MS = 2400;
     /** How long the stage-up (evolution) banner stays up. */
     const EVOLVE_MS = 2600;
-    /** How long an achievement-unlock banner stays up. */
-    const ACHIEVE_MS = 2600;
     /** The total-colony route served by the host half. */
     const COLONY_ROUTE = '/dsh-token-slime/colony';
     /** How often the total-colony panel refreshes. */
@@ -135,40 +133,9 @@ window.__ModuleLoader__.load({
         'panel.stage': '成长阶段',
         'panel.stageNext': '距「{name}」还差 {n} token',
         'panel.stageMax': '已是最终形态',
-        'panel.achievements': '成就',
-        'goal.hint': '🎯 {name} · 还差 {n}',
-        'goal.allDone': '🏆 全部成就达成！',
         'flash.evolve': '进化！',
         'colony.totalSessions': '共 {n} 个会话',
         'colony.allSessions': '全部会话 · 按食物排序',
-        'ach.firstMeal.name': '破壳而出',
-        'ach.firstMeal.desc': '吃到第一口 token',
-        'ach.firstSplit.name': '初次分裂',
-        'ach.firstSplit.desc': '完成第一次分裂',
-        'ach.colony5.name': '五世其昌',
-        'ach.colony5.desc': '族群达到 5 代',
-        'ach.engineer30.name': '代码工匠',
-        'ach.engineer30.desc': '调用代码/执行类工具 30 次',
-        'ach.explorer15.name': '网络探险家',
-        'ach.explorer15.desc': '调用网络探索类工具 15 次',
-        'ach.scribe10.name': '著作等身',
-        'ach.scribe10.desc': '调用文档产出类工具 10 次',
-        'ach.scholar30.name': '博览群书',
-        'ach.scholar30.desc': '调用阅读检索类工具 30 次',
-        'ach.polyglot.name': '全能选手',
-        'ach.polyglot.desc': '四类工具都用过',
-        'ach.firstMolt.name': '蜕皮新生',
-        'ach.firstMolt.desc': '经历第一次上下文压缩',
-        'ach.rings3.name': '三轮年轮',
-        'ach.rings3.desc': '经历 3 次上下文压缩',
-        'ach.marathon.name': '马拉松',
-        'ach.marathon.desc': '单会话 output 达 10 万',
-        'ach.million.name': '百万传说',
-        'ach.million.desc': '单会话 output 达 100 万',
-        'ach.cacheMaster.name': '缓存大师',
-        'ach.cacheMaster.desc': '缓存命中率达 80%',
-        'ach.mythicForm.name': '传说形态',
-        'ach.mythicForm.desc': '达到最终成长阶段',
       },
       en: {
         'meta.title': 'Token slime',
@@ -246,40 +213,9 @@ window.__ModuleLoader__.load({
         'panel.stage': 'Life stage',
         'panel.stageNext': '{n} tokens to {name}',
         'panel.stageMax': 'Final form reached',
-        'panel.achievements': 'Achievements',
-        'goal.hint': '🎯 {name} · {n} to go',
-        'goal.allDone': '🏆 All achievements done!',
         'flash.evolve': 'Evolved!',
         'colony.totalSessions': '{n} sessions total',
         'colony.allSessions': 'All sessions · by food',
-        'ach.firstMeal.name': 'First Meal',
-        'ach.firstMeal.desc': 'Eat your first output token.',
-        'ach.firstSplit.name': 'First Split',
-        'ach.firstSplit.desc': 'Split into a colony once.',
-        'ach.colony5.name': 'Thriving Colony',
-        'ach.colony5.desc': 'Reach colony generation 5.',
-        'ach.engineer30.name': 'Code Artisan',
-        'ach.engineer30.desc': 'Run 30 code/shell tool calls.',
-        'ach.explorer15.name': 'Web Explorer',
-        'ach.explorer15.desc': 'Run 15 web tool calls.',
-        'ach.scribe10.name': 'Prolific Scribe',
-        'ach.scribe10.desc': 'Produce 10 document tool calls.',
-        'ach.scholar30.name': 'Well-Read',
-        'ach.scholar30.desc': 'Run 30 reading/search tool calls.',
-        'ach.polyglot.name': 'Polyglot',
-        'ach.polyglot.desc': 'Use all four tool categories.',
-        'ach.firstMolt.name': 'First Molt',
-        'ach.firstMolt.desc': 'Survive a context compaction.',
-        'ach.rings3.name': 'Three Rings',
-        'ach.rings3.desc': 'Survive 3 context compactions.',
-        'ach.marathon.name': 'Marathon',
-        'ach.marathon.desc': 'Reach 100k output tokens in one session.',
-        'ach.million.name': 'Millionaire',
-        'ach.million.desc': 'Reach 1M output tokens in one session.',
-        'ach.cacheMaster.name': 'Cache Master',
-        'ach.cacheMaster.desc': 'Reach an 80% cache hit rate.',
-        'ach.mythicForm.name': 'Mythic Form',
-        'ach.mythicForm.desc': 'Reach the final life stage.',
       },
     };
 
@@ -396,56 +332,6 @@ window.__ModuleLoader__.load({
         toNext: next === null ? 0 : Math.max(0, next.at - f),
         progress: next === null ? 1 : clamp(span > 0 ? (f - stage.at) / span : 0, 0, 1),
       };
-    }
-
-    // ---- achievements (concrete, log-derived goals) -------------------
-    // Each milestone reads a value from the session's projections and unlocks
-    // at a target. `value` receives a context object assembled by the widget.
-    const ACHIEVEMENTS = [
-      { id: 'firstMeal', icon: '🍽', target: 1, value: (c) => c.buckets.output },
-      { id: 'firstSplit', icon: '🧬', target: 1, value: (c) => c.colony.gen },
-      { id: 'colony5', icon: '👪', target: 5, value: (c) => c.colony.gen },
-      { id: 'engineer30', icon: '🔧', target: 30, value: (c) => c.counts.engineer },
-      { id: 'explorer15', icon: '🧭', target: 15, value: (c) => c.counts.explorer },
-      { id: 'scribe10', icon: '📜', target: 10, value: (c) => c.counts.scribe },
-      { id: 'scholar30', icon: '📚', target: 30, value: (c) => c.counts.scholar },
-      { id: 'polyglot', icon: '🎓', target: 4, value: (c) => TOOL_SPECIES.filter((k) => c.counts[k] > 0).length },
-      { id: 'firstMolt', icon: '🌀', target: 1, value: (c) => c.compactions },
-      { id: 'rings3', icon: '🎯', target: 3, value: (c) => c.compactions },
-      { id: 'marathon', icon: '🏃', target: 100000, value: (c) => c.buckets.output },
-      { id: 'million', icon: '💎', target: 1000000, value: (c) => c.buckets.output },
-      { id: 'cacheMaster', icon: '⚡', target: 80, value: (c) => Math.round(c.diet.cacheRatio * 100), needsPrompt: true },
-      { id: 'mythicForm', icon: '🌟', target: STAGES.length - 1, value: (c) => c.stage.index },
-    ];
-
-    /**
-     * Compute progress + unlock state for every achievement.
-     * @param c - `{ buckets, counts, compactions, colony, stage, diet }`.
-     * @returns one `{ id, icon, value, target, unlocked, progress }` per achievement.
-     */
-    function achieveState(c) {
-      return ACHIEVEMENTS.map((a) => {
-        let value = num(a.value(c));
-        if (a.needsPrompt === true && c.buckets.prompt <= 0) value = 0;
-        return {
-          id: a.id,
-          icon: a.icon,
-          value,
-          target: a.target,
-          unlocked: value >= a.target,
-          progress: clamp(a.target > 0 ? value / a.target : 0, 0, 1),
-        };
-      });
-    }
-
-    /** The locked achievement closest to unlocking (highest progress), or null. */
-    function nextGoal(achievements) {
-      let best = null;
-      for (const a of achievements) {
-        if (a.unlocked) continue;
-        if (best === null || a.progress > best.progress) best = a;
-      }
-      return best;
     }
 
     // ---- tool diet ----------------------------------------------------
@@ -613,12 +499,6 @@ window.__ModuleLoader__.load({
       '.tsl-colony-list{max-height:340px;overflow-y:auto}',
       '.tsl-aura{animation:tsl-aura 2.4s ease-in-out infinite}',
       '.tsl-sparkles{animation:tsl-twinkle 1.8s ease-in-out infinite}',
-      '.tsl-ach-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}',
-      '.tsl-ach{display:flex;flex-direction:column;gap:3px;padding:6px 7px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16));background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.05));opacity:.55;min-width:0}',
-      '.tsl-ach-on{opacity:1;border-color:var(--dsw-alias-border-l2,#d9d9d9);background:var(--dsw-alias-bg-layer-1,#fff)}',
-      '.tsl-ach-icon{font-size:14px;line-height:1}',
-      '.tsl-ach-name{font-size:9.5px;line-height:1.25;color:var(--dsw-alias-label-primary,#1a1a1a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.tsl-ach-bar{display:block;width:100%}',
       '@keyframes tsl-aura{0%,100%{opacity:.14}50%{opacity:.3}}',
       '@keyframes tsl-twinkle{0%,100%{opacity:.4}50%{opacity:1}}',
       '@keyframes tsl-breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.06,.94)}}',
@@ -942,9 +822,6 @@ window.__ModuleLoader__.load({
       const accent = 'hsl(' + ((breed.hue + colony.gen * 6) % 360) + ' 62% 46%)';
       const rings = ringsOf(compactions);
       const stage = stageOf(buckets.output);
-      const achievements = achieveState({ buckets, counts, compactions, colony, stage, diet });
-      const goal = nextGoal(achievements);
-      const unlockedCount = achievements.filter((a) => a.unlocked).length;
 
       const [open, setOpen] = React.useState(false);
       const [excited, setExcited] = React.useState(false);
@@ -952,13 +829,11 @@ window.__ModuleLoader__.load({
       const [splitFlash, setSplitFlash] = React.useState(false);
       const [moltFlash, setMoltFlash] = React.useState(false);
       const [evolveFlash, setEvolveFlash] = React.useState(null);
-      const [achieveFlash, setAchieveFlash] = React.useState(null);
       const rootRef = React.useRef(null);
       const meal = React.useRef({ food: buckets.output });
       const gen = React.useRef({ value: colony.gen });
       const ringsRef = React.useRef({ value: compactions });
       const stageRef = React.useRef({ value: stage.index });
-      const unlockedRef = React.useRef(null);
       const timers = React.useRef(null);
       if (timers.current === null) timers.current = new Set();
       const floatSeed = React.useRef(0);
@@ -1031,25 +906,6 @@ window.__ModuleLoader__.load({
         if (timers.current !== null) timers.current.add(done);
       }, [stage.index]);
 
-      // Achievement unlocks: celebrate newly reached milestones (not history).
-      React.useEffect(() => {
-        const unlockedNow = achievements.filter((a) => a.unlocked).map((a) => a.id);
-        if (unlockedRef.current === null) {
-          unlockedRef.current = new Set(unlockedNow);
-          return;
-        }
-        const fresh = unlockedNow.filter((id) => !unlockedRef.current.has(id));
-        for (const id of fresh) unlockedRef.current.add(id);
-        if (fresh.length === 0) return;
-        const last = achievements.find((a) => a.id === fresh[fresh.length - 1]);
-        setAchieveFlash(last);
-        const done = setTimeout(() => {
-          setAchieveFlash(null);
-          if (timers.current !== null) timers.current.delete(done);
-        }, ACHIEVE_MS);
-        if (timers.current !== null) timers.current.add(done);
-      }, [achievements]);
-
       // Close the panel on an outside click or Escape.
       React.useEffect(() => {
         if (!open) return undefined;
@@ -1074,21 +930,19 @@ window.__ModuleLoader__.load({
       const restChildren = colony.gen - drawn;
       const openColony = typeof props.openColonyTab === 'function' ? props.openColonyTab : null;
 
-      // Third dock line: a transient celebration wins over the standing goal hint.
+      // Third dock line: a transient celebration wins over the standing stage hint.
       const triggerFlash = evolveFlash !== null
         ? tr('flash.evolve') + ' ' + tr('stage.' + evolveFlash.to)
-        : achieveFlash !== null
-          ? '🏆 ' + tr('ach.' + achieveFlash.id + '.name')
-          : splitFlash
-            ? tr('flash.split')
-            : moltFlash
-              ? tr('flash.molt')
-              : null;
+        : splitFlash
+          ? tr('flash.split')
+          : moltFlash
+            ? tr('flash.molt')
+            : null;
       const triggerLine = triggerFlash !== null
         ? triggerFlash
-        : goal !== null
-          ? tr('goal.hint').replace('{name}', tr('ach.' + goal.id + '.name')).replace('{n}', fmtCompact(Math.max(0, goal.target - goal.value)))
-          : tr('goal.allDone');
+        : stage.next === null
+          ? tr('panel.stageMax')
+          : tr('panel.stageNext').replace('{name}', tr('stage.' + stage.next)).replace('{n}', fmtCompact(stage.toNext));
 
       const trigger = h(
         'button',
@@ -1451,44 +1305,6 @@ window.__ModuleLoader__.load({
           ),
         );
 
-        const achShelf = h(
-          'div',
-          { style: { marginBottom: 8 } },
-          h(
-            'div',
-            {
-              style: {
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: 10.5,
-                marginBottom: 4,
-                color: 'var(--dsw-alias-label-secondary, #6b6b6b)',
-              },
-            },
-            h('span', null, tr('panel.achievements')),
-            h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, unlockedCount + ' / ' + achievements.length),
-          ),
-          h(
-            'div',
-            { className: 'tsl-ach-grid' },
-            achievements.map((a) =>
-              h(
-                'div',
-                {
-                  key: a.id,
-                  className: 'tsl-ach' + (a.unlocked ? ' tsl-ach-on' : ''),
-                  title: tr('ach.' + a.id + '.desc'),
-                  'data-ach': a.id,
-                  'data-unlocked': a.unlocked ? '1' : '0',
-                },
-                h('span', { className: 'tsl-ach-icon' }, a.icon),
-                h('span', { className: 'tsl-ach-name' }, tr('ach.' + a.id + '.name')),
-                h('span', { className: 'tsl-ach-bar' }, h(Bar, { value: a.progress, color: a.unlocked ? accent : 'var(--dsw-alias-border-l2, #c5c5c5)', height: 2 })),
-              ),
-            ),
-          ),
-        );
-
         panel = h(
           'div',
           { className: 'tsl-panel', role: 'dialog', 'aria-label': tr('panel.title') },
@@ -1533,7 +1349,6 @@ window.__ModuleLoader__.load({
           toolRows,
           dietBlock,
           traitRow,
-          achShelf,
           openColony !== null
             ? h(
                 'button',
@@ -1858,9 +1673,6 @@ window.__ModuleLoader__.load({
         ringsOf,
         STAGES,
         stageOf,
-        ACHIEVEMENTS,
-        achieveState,
-        nextGoal,
       },
     };
   },

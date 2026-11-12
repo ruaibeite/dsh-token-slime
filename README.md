@@ -3,12 +3,12 @@
 > 养在输入框下方的一只小史莱姆 · DeepSeek Harness 插件
 
 它吃掉模型在当前会话里**写出来的 token**（`outputTokens`），沿**成长阶段**一步步长大、分裂成群，
-按**工具构成**长出头饰，每次**上下文压缩**蜕一层壳留下年轮，还会解锁一枚枚**成就**；
+按**工具构成**长出头饰，每次**上下文压缩**蜕一层壳留下年轮；
 右侧栏的**总族群**汇总 dsh 里**全部会话**，并显示会话总数供你核对。
 
 ## English
 
-A slime lives under the composer and eats the **output tokens** the agent writes in the current session. It matures through named **life stages**, splits into a colony, wears a headpiece derived from the session's **tool mix** (hard hat for shell/code, safari hat for web, mortarboard for documents, glasses for reading), and earns **achievements**. Every **context compaction** grows a ring on its body and sheds a shell. A right-sidebar tab totals the colony across **every session in dsh** and shows the session count so you can reconcile it.
+A slime lives under the composer and eats the **output tokens** the agent writes in the current session. It matures through named **life stages**, splits into a colony, and wears a headpiece derived from the session's **tool mix** (hard hat for shell/code, safari hat for web, mortarboard for documents, glasses for reading). Every **context compaction** grows a ring on its body and sheds a shell. A right-sidebar tab totals the colony across **every session in dsh** and shows the session count so you can reconcile it.
 
 Everything is derived from projections the Harness already computes (`tokenUsage`, `contextPressure`, plus this plugin's own `slime` projection). It adds no prompt, no tool, no model call and no session writes, so the pet is a pure function of the session log.
 
@@ -18,17 +18,16 @@ Everything is derived from projections the Harness already computes (`tokenUsage
        ╰─── +128 ───────╯        身子上的圈 = 年轮 = 压缩次数
 ```
 
-## 玩法（v0.3）
+## 玩法（v0.3.1）
 
-核心闭环：**干活 → token → 阶段/成就进度 → 解锁庆祝 → 下一个目标**。
+核心闭环：**干活 → token → 成长阶段进度 → 升阶庆祝 → 下一阶段**。
 
 | 机制 | 规则 |
 | --- | --- |
 | 吃饭 | 每个 `assistant/message` 的 `outputTokens` 都算一口；面板里的 `+N` 是刚刚吃掉的一口 |
 | **成长阶段** | 按本会话累计 output 走 6 阶段：蛋 → 幼体(≥1) → 少年(≥2.5k) → 成体(≥25k) → 长老(≥120k) → 传说(≥600k)。阶段越高体型越大，长老/传说带光环，传说还会闪光；升阶弹「进化！」 |
 | 分裂/族群 | 第 `g` 代需要 `4000 × 1.7^g` 个 output token：4k → 6.8k → 11.6k …，最多 9 代。与「阶段」正交：阶段=成熟度，族群=繁殖数 |
-| **成就（14 枚）** | 破壳、初次分裂、五世其昌、代码工匠(engineer≥30)、网络探险家(explorer≥15)、著作等身(scribe≥10)、博览群书(scholar≥30)、全能选手(四类都用过)、蜕皮新生、三轮年轮、马拉松(100k)、百万传说(1M)、缓存大师(命中≥80%)、传说形态。图鉴里有成就架，解锁弹「🏆」 |
-| **下一目标** | dock 常驻一行提示，挑最接近的未解锁成就给出具体差额（如「🎯 代码工匠 · 还差 12」），直接引导你下一步做什么 |
+| **下一阶段提示** | dock 常驻一行提示，显示距下一阶段的差额（如「距「成体」还差 22k token」），到顶后显示「已是最终形态」 |
 | **物种（工具）** | 按 `tool/call` 分布：bash/写文件多 → **工装种**（安全帽）；web 多 → **探险种**（探险帽）；docx/pptx/xlsx/present 多 → **文书种**（学士帽）；read/glob/grep 多 → **学者种**（圆眼镜） |
 | 物种（兜底） | 没调用过可分类工具时按缓存命中率：苔藓种（≥72%）→ 草叶种 → 黏土种 → 熔岩种（<20%） |
 | **年轮/蜕皮** | 每次 `compaction/start` 身体多一圈年轮并蜕下一层壳（动画 + 提示） |
@@ -36,7 +35,7 @@ Everything is derived from projections the Harness already computes (`tokenUsage
 | 蛋 | 会话还没有任何 token 时，它是一颗会轻轻摇晃的蛋 |
 | **总族群（全量）** | 右侧栏「史莱姆族群」页签（或图鉴里「查看总族群」）。聚合 **dsh 全部会话**＝`sessionPersistence.list()` 的所有历史会话（含 v3 旧格式）＋未落盘的活会话，按 id 去重。**头部显著显示「共 N 个会话」**，可与 dsh 实际会话数核对；下方列出全部会话（按食物排序、可滚动） |
 
-> 阶段与成就都由会话日志纯推导，重开/重放同一会话结果一致；不新增任何模型调用或会话写入。
+> 阶段、物种、年轮都由会话日志纯推导，重开/重放同一会话结果一致；不新增任何模型调用或会话写入。
 
 ## 三个新增能力怎么实现的
 
@@ -111,7 +110,7 @@ wire: { summary: false, view, viewSchema }   // 浏览器用 useProjection('slim
 
 ```sh
 cd dsh-token-slime
-npm test        # 19 个 Host 测试 + 27 个渲染测试 = 46 项
+npm test        # 19 个 Host 测试 + 25 个渲染测试 = 44 项
 ```
 
 - `test/host.mjs`：工具分类映射、投影 fold（含重试替换语义、坏存档修复）、
@@ -120,8 +119,8 @@ npm test        # 19 个 Host 测试 + 27 个渲染测试 = 46 项
 - `test/render.mjs`：自带迷你 React（hooks + 异步 effect + 多 pass），真实执行组件，
   覆盖蛋/成体、四种工具物种与兜底物种、年轮数量、压缩增量触发蜕皮提示、
   缺投影降级、locale 覆盖、英文回退、右侧栏 tab 注册与打开、总族群面板渲染与错误态、
-  **六阶段阈值、阶段梯、升阶进化横幅、成就解锁判定、成就架、🏆 解锁横幅、下一目标提示、
-  面板会话总数与路由 total 一致**。
+  **六阶段阈值、阶段梯、升阶进化横幅、下一阶段提示、面板会话总数与路由 total 一致、
+  以及「成就 UI 已彻底移除」回归**。
 
 ## 已知限制
 
@@ -134,9 +133,8 @@ npm test        # 19 个 Host 测试 + 27 个渲染测试 = 46 项
 
 - 调整分裂节奏改 `client.js` 顶部 `FIRST_SPLIT` / `GROWTH` / `MAX_GEN`
   （`index.js` 里有同名常量用于聚合，测试会校验两端一致）；
-- 调整成长阶段改 `client.js` 的 `STAGES`（阈值 + key），新增成就改 `ACHIEVEMENTS`
-  （`value` 从投影上下文取值、`target` 为解锁线）；两者都需在 `locale/*.json` 与内嵌 `TEXT` 补文案，
-  `npm test` 的 locale 完备性测试会抓缺漏；
+- 调整成长阶段改 `client.js` 的 `STAGES`（阈值 + key），并在 `locale/*.json` 与内嵌 `TEXT`
+  补对应 `stage.*` 文案，`npm test` 的 locale 完备性测试会抓缺漏；
 - 新增工具分类时同时改 `index.js` 与 `client.js` 的 `categoryOfTool`，`npm test` 会抓不一致；
 - 修改客户端后需要重新安装并刷新页面；修改 Host 端（`index.js`）在已安装状态下
   需要重启桌面端才会加载新的模块代。
