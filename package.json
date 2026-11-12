@@ -1,0 +1,57 @@
+{
+  "name": "@ruaibeite/dsh-token-slime",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "A composer slime that grows on the tokens your agent writes, splits into a colony, wears a breed hat from the tool mix, molts on every context compaction, and totals the colony across sessions in a right-sidebar tab.",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "assets/icon-180.png",
+    "LICENSE",
+    "README.md",
+    "test/"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "slime",
+    "pet",
+    "tokens"
+  ],
+  "scripts": {
+    "test": "node test/host.mjs && node test/render.mjs"
+  },
+  "author": "ruaibeite",
+  "homepage": "https://github.com/ruaibeite/dsh-token-slime#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruaibeite/dsh-token-slime.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ruaibeite/dsh-token-slime/issues"
+  }
+}
