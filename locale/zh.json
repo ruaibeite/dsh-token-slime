@@ -79,5 +79,16 @@
   "panel.stageMax": "已是最终形态",
   "flash.evolve": "进化！",
   "colony.totalSessions": "共 {n} 个会话",
-  "colony.allSessions": "全部会话 · 按食物排序"
+  "colony.allSessions": "全部会话 · 按食物排序",
+  "a11y.pet": "摸摸史莱姆",
+  "panel.diary": "史莱姆日记",
+  "morph.crystal": "水晶种",
+  "morph.scrappy": "顽强种",
+  "morph.ancient": "远古种",
+  "diary.meal": "今天吃了 {n} 个 token，长到了{stage}。",
+  "diary.molt": "蜕了 {n} 层皮，每圈年轮都是一次回忆。",
+  "diary.errors": "被 bug 吓到 {n} 次，但我挺过来了。",
+  "diary.morph": "我好像是稀有的{morph}！",
+  "diary.breed": "大家都说我是{breed}。",
+  "diary.moltEntry": "蜕皮"
 }

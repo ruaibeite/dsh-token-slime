@@ -81,6 +81,9 @@ export function emptyTools() {
   return tools
 }
 
+/** How many molt timestamps the diary keeps. */
+export const MOLT_LOG_CAP = 12
+
 /** Initial projection state. */
 export function initSlimeState() {
   return {
@@ -89,7 +92,18 @@ export function initSlimeState() {
     tools: emptyTools(),
     compactions: 0,
     lastOutput: null,
+    // Vital signals for mood / habitat / diary.
+    errors: 0,
+    retries: 0,
+    lastErrorAt: 0,
+    lastActivityAt: 0,
+    moltTimes: [],
   }
+}
+
+/** The recorded epoch-ms of an event (0 when absent), replay-stable. */
+function eventTime(event) {
+  return num(event.time)
 }
 
 /** Whether two usage samples describe the same attempt (retry replacement). */
@@ -112,32 +126,48 @@ function sameAttempt(left, right) {
  */
 export function foldSlime(state, event) {
   if (event === null || typeof event !== 'object') return state
+  const time = eventTime(event)
   if (event.type === 'tool/call') {
     const data = event.data !== null && typeof event.data === 'object' ? event.data : {}
     const category = categoryOfTool(data.name)
     const tools = { ...state.tools }
     tools[category] = num(tools[category]) + 1
-    return { ...state, tools, toolCalls: state.toolCalls + 1 }
+    return { ...state, tools, toolCalls: state.toolCalls + 1, lastActivityAt: time }
+  }
+  if (event.type === 'tool/result') {
+    const data = event.data !== null && typeof event.data === 'object' ? event.data : {}
+    const message = data.message !== null && typeof data.message === 'object' ? data.message : {}
+    const isError = message.isError === true
+    return {
+      ...state,
+      errors: state.errors + (isError ? 1 : 0),
+      lastErrorAt: isError ? time : state.lastErrorAt,
+      lastActivityAt: time,
+    }
   }
   if (event.type === 'compaction/start') {
-    return { ...state, compactions: state.compactions + 1 }
+    const moltTimes = [...state.moltTimes, time].slice(-MOLT_LOG_CAP)
+    return { ...state, compactions: state.compactions + 1, moltTimes, lastActivityAt: time }
   }
   if (event.type === 'llm/retry-started') {
     const data = event.data !== null && typeof event.data === 'object' ? event.data : {}
     const last = state.lastOutput
-    if (last === null || last === undefined || last.turn !== data.turn || last.step !== data.step) return state
-    return { ...state, lastOutput: null }
+    const clears = last !== null && last !== undefined && last.turn === data.turn && last.step === data.step
+    return { ...state, retries: state.retries + 1, lastOutput: clears ? null : last, lastActivityAt: time }
   }
   if (event.type === 'assistant/message') {
     const data = event.data !== null && typeof event.data === 'object' ? event.data : {}
     const usage = data.usage !== null && typeof data.usage === 'object' ? data.usage : null
-    if (usage === null) return state
+    if (usage === null) return { ...state, lastActivityAt: time }
     const sample = num(usage.outputTokens)
     const candidate = { turn: num(data.turn), step: num(data.step), value: sample }
     const previous = sameAttempt(state.lastOutput, candidate) ? state.lastOutput : null
-    if (previous !== null && previous.value === sample) return state
+    if (previous !== null && previous.value === sample) return { ...state, lastActivityAt: time }
     const outputTokens = state.outputTokens - (previous === null ? 0 : num(previous.value)) + sample
-    return { ...state, outputTokens, lastOutput: candidate }
+    return { ...state, outputTokens, lastOutput: candidate, lastActivityAt: time }
+  }
+  if (event.type === 'user/message') {
+    return { ...state, lastActivityAt: time }
   }
   return state
 }
@@ -168,7 +198,18 @@ function parseSlimeState(value) {
     tools,
     compactions: toCount(value.compactions),
     lastOutput,
+    errors: toCount(value.errors),
+    retries: toCount(value.retries),
+    lastErrorAt: toCount(value.lastErrorAt),
+    lastActivityAt: toCount(value.lastActivityAt),
+    moltTimes: parseMoltTimes(value.moltTimes),
   }
+}
+
+/** Keep only finite, non-negative timestamps, capped to the diary length. */
+function parseMoltTimes(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter((t) => typeof t === 'number' && Number.isFinite(t) && t >= 0).slice(-MOLT_LOG_CAP)
 }
 
 /** Client-visible shape: no retry bookkeeping, only what the widget renders. */
@@ -178,6 +219,11 @@ function viewSlimeState(state) {
     toolCalls: state.toolCalls,
     tools: { ...state.tools },
     compactions: state.compactions,
+    errors: state.errors,
+    retries: state.retries,
+    lastErrorAt: state.lastErrorAt,
+    lastActivityAt: state.lastActivityAt,
+    moltTimes: [...state.moltTimes],
   }
 }
 
@@ -194,6 +240,11 @@ function parseSlimeView(value) {
     toolCalls: toCount(value.toolCalls),
     tools,
     compactions: toCount(value.compactions),
+    errors: toCount(value.errors),
+    retries: toCount(value.retries),
+    lastErrorAt: toCount(value.lastErrorAt),
+    lastActivityAt: toCount(value.lastActivityAt),
+    moltTimes: parseMoltTimes(value.moltTimes),
   }
 }
 
@@ -205,7 +256,7 @@ function parseSlimeView(value) {
  */
 export const SLIME_PROJECTION = {
   key: 'slime',
-  stateVersion: 1,
+  stateVersion: 2,
   stateSchema: { parse: parseSlimeState },
   init: initSlimeState,
   apply: foldSlime,
@@ -304,6 +355,8 @@ function applySlime(entry, state) {
   entry.outputTokens = Math.max(entry.outputTokens, num(state.outputTokens))
   entry.toolCalls = num(state.toolCalls)
   entry.compactions = num(state.compactions)
+  entry.errors = num(state.errors)
+  entry.lastActivityAt = num(state.lastActivityAt)
   const tools = state.tools !== null && typeof state.tools === 'object' ? state.tools : {}
   for (const category of TOOL_CATEGORIES) entry.tools[category] = num(tools[category])
 }
@@ -364,6 +417,8 @@ export async function colonyPayload(ctx, handle) {
       toolCalls: 0,
       tools: emptyTools(),
       compactions: 0,
+      errors: 0,
+      lastActivityAt: 0,
     }
     const live = typeof ctx.sessions.get === 'function' ? ctx.sessions.get(header.id) : undefined
     if (live !== undefined && live !== null) {
@@ -402,6 +457,8 @@ export async function colonyPayload(ctx, handle) {
       toolCalls: 0,
       tools: emptyTools(),
       compactions: 0,
+      errors: 0,
+      lastActivityAt: 0,
     }
     applySlime(entry, stateOfSession(handle, live))
     entries.set(live.id, entry)
@@ -424,6 +481,8 @@ export async function colonyPayload(ctx, handle) {
         compactions: entry.compactions,
         species: speciesOfTools(entry.tools),
         tools: entry.tools,
+        errors: entry.errors,
+        lastActivityAt: entry.lastActivityAt,
       }
     })
 

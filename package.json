@@ -1,8 +1,8 @@
 {
   "name": "@ruaibeite/dsh-token-slime",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
-  "description": "A composer slime that grows through life stages on the tokens your agent writes, splits into a colony, wears a breed hat from the tool mix, molts on every compaction, and totals the colony across every session in a right-sidebar tab.",
+  "description": "A living composer slime: it matures through life stages on the tokens your agent writes, reacts to errors and context pressure, dozes when idle, loves being petted, splits into a colony, wears a breed hat, molts on compaction, occasionally appears as a rare morph, keeps a diary, and lives in a day/night habitat totaling every session.",
   "license": "MIT",
   "exports": {
     ".": "./index.js",

@@ -102,6 +102,9 @@ function walk(nodes, out) {
     if (node.props['data-session-count'] !== undefined) out.sessionCounts.push(String(node.props['data-session-count']))
     if (node.props['data-stage'] !== undefined) out.stages.push(String(node.props['data-stage']))
     if (node.props['data-ach'] !== undefined) out.achievements.push({ id: String(node.props['data-ach']), unlocked: node.props['data-unlocked'] === '1' })
+    if (node.props['data-mood'] !== undefined) out.moods.push(String(node.props['data-mood']))
+    if (node.props['data-morph'] !== undefined) out.morphs.push(String(node.props['data-morph']))
+    if (node.props['data-phase'] !== undefined) out.phases.push(String(node.props['data-phase']))
     if (node.props.style && typeof node.props.style === 'object') out.styles.push(node.props.style)
     walk(node.children, out)
   }
@@ -109,10 +112,18 @@ function walk(nodes, out) {
 
 /** A fresh render-output accumulator with every collected channel. */
 function newOut() {
-  return { text: [], tags: [], classes: [], labels: [], species: [], hats: [], molts: [], ringAttrs: [], sessionCounts: [], stages: [], achievements: [], styles: [] }
+  return { text: [], tags: [], classes: [], labels: [], species: [], hats: [], molts: [], ringAttrs: [], sessionCounts: [], stages: [], achievements: [], moods: [], morphs: [], phases: [], styles: [] }
 }
 
 /** Load client.js in a sandbox and return its module exports plus runtime. */
+// Widget timers (mood ticker, reaction/meal flashes) must not keep the test
+// process alive after the assertions finish; unref them so exit is prompt.
+const unrefTimer = (fn) => (...args) => {
+  const t = fn(...args)
+  if (t && typeof t.unref === 'function') t.unref()
+  return t
+}
+
 function loadClient(options = {}) {
   let factory = null
   const fetchCalls = []
@@ -137,9 +148,9 @@ function loadClient(options = {}) {
       return { ok: true, status: 200, json: async () => options.payload ?? { ok: true } }
     },
     URL,
-    setTimeout,
+    setTimeout: unrefTimer(setTimeout),
     clearTimeout,
-    setInterval,
+    setInterval: unrefTimer(setInterval),
     clearInterval,
     console,
   }
@@ -636,6 +647,144 @@ await test('no achievement UI remains anywhere in the widget', async () => {
   assert.ok(!opened.joined.includes('成就'), 'no achievements section header')
 })
 
+// ----------------------------------------------- alive core (A)
+/** Mount, click the pet button, and render the reaction. */
+async function clickPet(runtime, component, props) {
+  runtime.cursor = 0; runtime.effects = []; runtime.dirty = false
+  let tree = expand(runtime.React.createElement(component, props), runtime.React, 0)
+  const clickable = []; collectClickable(tree, clickable)
+  const cleanups = []
+  for (const effect of runtime.effects) { const c = await effect(); if (typeof c === 'function') cleanups.push(c) }
+  await new Promise((r) => setTimeout(r, 0))
+  const petBtn = clickable.find((n) => n.props && n.props.className === 'tsl-pet')
+  if (petBtn === undefined) throw new Error('no pet button found')
+  petBtn.props.onClick()
+  runtime.cursor = 0; runtime.effects = []; runtime.dirty = false
+  tree = expand(runtime.React.createElement(component, props), runtime.React, 0)
+  for (const effect of runtime.effects) { const c = await effect(); if (typeof c === 'function') cleanups.push(c) }
+  await new Promise((r) => setTimeout(r, 0))
+  const out = newOut(); walk(tree, out); out.joined = out.text.join(' ')
+  out.cleanup = () => { for (const c of cleanups) c() }
+  return out
+}
+
+async function dockMount(propsSteps) {
+  const { moduleExports, runtime } = loadClient()
+  const { ctx, slotRegistrations } = fakeClientContext()
+  moduleExports.apply(ctx)
+  const dock = findRegistration(slotRegistrations, 'conversation.composer.dock')
+  const out = await mount(runtime.React, runtime, dock.component, propsSteps)
+  return out
+}
+
+await test('petting the slime makes it happy and emits a heart', async () => {
+  const { moduleExports, runtime } = loadClient()
+  const { ctx, slotRegistrations } = fakeClientContext()
+  moduleExports.apply(ctx)
+  const dock = findRegistration(slotRegistrations, 'conversation.composer.dock')
+  const out = await clickPet(runtime, dock.component, dockProps(projectionsWith({})))
+  out.cleanup()
+  assert.ok(out.joined.includes('♥'), 'a heart floats up when petted')
+  assert.ok(out.moods.includes('happy'), 'the slime looks happy when petted')
+})
+
+await test('a new error makes the slime hurt (bandage)', async () => {
+  const before = dockProps(projectionsWith({ errors: 0 }))
+  const after = dockProps(projectionsWith({ errors: 1 }))
+  const out = await dockMount([before, after])
+  out.cleanup()
+  assert.ok(out.moods.includes('hurt'), 'hurt mood after an error')
+  assert.ok(out.classes.includes('tsl-bandage'), 'a bandage is drawn')
+})
+
+await test('a retry makes the slime dizzy', async () => {
+  const before = dockProps(projectionsWith({ errors: 0, retries: 0 }))
+  const after = dockProps(projectionsWith({ errors: 1, retries: 1 }))
+  const out = await dockMount([before, after])
+  out.cleanup()
+  assert.ok(out.moods.includes('dizzy'), 'dizzy mood after a retry')
+})
+
+await test('high context pressure makes the slime stuffed and sweaty', async () => {
+  const projections = projectionsWith({}, { contextPressure: { pressureTokens: 120000, contextWindow: 128000 } })
+  const out = await dockMount([dockProps(projections)])
+  out.cleanup()
+  assert.ok(out.moods.includes('stuffed'), 'stuffed mood near a full context')
+  assert.ok(out.classes.includes('tsl-sweat'), 'a sweat drop is drawn')
+})
+
+await test('a long-idle session makes the slime doze', async () => {
+  const projections = projectionsWith({ lastActivityAt: Date.now() - 120000 })
+  const out = await dockMount([dockProps(projections)])
+  out.cleanup()
+  assert.ok(out.moods.includes('sleepy'), 'sleepy mood when idle')
+})
+
+// ----------------------------------------------- habitat (B)
+await test('colony panel renders a living habitat with session slimes', async () => {
+  const payload = {
+    ok: true, generatedAt: 1,
+    total: { sessions: 3, food: 40000, toolCalls: 5, compactions: 2, tools: { engineer: 5, explorer: 0, scholar: 0, scribe: 0, other: 0 }, gen: 2, species: 'engineer' },
+    sessions: [
+      { id: 'h1', title: '甲', outputTokens: 20000, gen: 2, progress: 0.5, compactions: 1, species: 'engineer', errors: 0, lastActivityAt: Date.now() },
+      { id: 'h2', title: '乙', outputTokens: 12000, gen: 1, progress: 0.3, compactions: 1, species: 'explorer', errors: 0, lastActivityAt: Date.now() - 400000 },
+      { id: 'h3', title: '丙', outputTokens: 8000, gen: 1, progress: 0.2, compactions: 0, species: null, errors: 0, lastActivityAt: 0 },
+    ],
+  }
+  const { moduleExports, runtime } = loadClient({ payload })
+  const { ctx, slotRegistrations } = fakeClientContext()
+  moduleExports.apply(ctx)
+  const body = findRegistration(slotRegistrations, 'sidebar.right.pane.tab')
+  const out = await mount(runtime.React, runtime, body.component, [{ t: undefined }])
+  out.cleanup()
+  assert.ok(out.classes.includes('tsl-habitat'), 'habitat scene present')
+  assert.ok(out.phases.length >= 1 && ['day', 'dusk', 'night'].includes(out.phases[0]), 'habitat has a day phase')
+  const habSlimes = out.classes.filter((c) => c === 'tsl-hab-slime').length
+  assert.equal(habSlimes, 3, 'one habitat slime per session')
+  assert.ok(out.classes.includes('tsl-hab-ground'), 'ground strip present')
+  assert.ok(out.classes.filter((c) => c === 'tsl-hab-shell').length === 2, 'shed shells decorate the ground')
+})
+
+// ----------------------------------------------- morphs & diary (C)
+await test('morphOf picks ancient / crystal / scrappy emergently', () => {
+  const { moduleExports } = loadClient()
+  const m = moduleExports.__model
+  const b = (o) => ({ uncached: 0, cacheRead: 0, cacheWrite: 0, output: 0, prompt: 0, total: 0, ...o })
+  assert.equal(m.morphOf(b({ output: 1500000, prompt: 100, total: 1500100, cacheRead: 0 }), 0), 'ancient')
+  assert.equal(m.morphOf(b({ output: 5000, prompt: 100000, total: 105000, cacheRead: 99000 }), 0), 'crystal')
+  assert.equal(m.morphOf(b({ output: 5000, prompt: 60000, total: 65000, cacheRead: 10000 }), 6), 'scrappy')
+  assert.equal(m.morphOf(b({ output: 5000, prompt: 60000, total: 65000, cacheRead: 10000 }), 0), null)
+})
+
+await test('a near-perfect-cache session renders a crystal morph', async () => {
+  const projections = projectionsWith({}, { tokenUsage: { uncachedInputTokens: 1000, outputTokens: 5000, cacheReadTokens: 100000, cacheWriteTokens: 0 } })
+  const opened = await renderOpen(projections)
+  assert.ok(opened.morphs.includes('crystal'), 'crystal morph rendered')
+  assert.ok(opened.joined.includes('水晶种'), 'crystal badge label shown')
+})
+
+await test('an error-heavy session renders a scrappy morph with bandages', async () => {
+  const projections = projectionsWith({ errors: 6 }, { tokenUsage: { uncachedInputTokens: 50000, outputTokens: 5000, cacheReadTokens: 10000, cacheWriteTokens: 0 } })
+  const opened = await renderOpen(projections)
+  assert.ok(opened.morphs.includes('scrappy'), 'scrappy morph rendered')
+  assert.ok(opened.classes.includes('tsl-bandage'), 'scrappy bandages drawn')
+})
+
+await test('a million-token session renders an ancient morph', async () => {
+  const projections = projectionsWith({}, { tokenUsage: { uncachedInputTokens: 1000, outputTokens: 1500000, cacheReadTokens: 1000, cacheWriteTokens: 0 } })
+  const opened = await renderOpen(projections)
+  assert.ok(opened.morphs.includes('ancient'), 'ancient morph rendered')
+  assert.ok(opened.joined.includes('远古种'), 'ancient badge label shown')
+})
+
+await test('the panel shows a first-person diary with a molt entry', async () => {
+  const projections = projectionsWith({ compactions: 2, moltTimes: [Date.now() - 60000, Date.now()] })
+  const opened = await renderOpen(projections)
+  assert.ok(opened.joined.includes('史莱姆日记'), 'diary section header present')
+  assert.ok(opened.joined.includes('今天吃了'), 'a diary musing is rendered')
+  assert.ok(opened.joined.includes('蜕皮'), 'a molt diary entry is rendered')
+})
+
 // -------------------------------------------------- locale resources
 await test('locale files carry every key the widget can render', () => {
   for (const [file, fallbackTable] of [
@@ -645,7 +794,7 @@ await test('locale files carry every key the widget can render', () => {
     const json = JSON.parse(fs.readFileSync(new URL(file, LOCALE_DIR), 'utf8'))
     assert.equal(typeof json.meta.title, 'string')
     assert.equal(typeof json.meta.description, 'string')
-    for (const key of ['panel.title', 'panel.rings', 'panel.tools', 'panel.openColony', 'flash.molt', 'colony.title', 'colony.tab', 'species.engineer', 'species.explorer', 'species.scribe', 'species.scholar', 'stage.adult', 'stage.mythic', 'panel.stage', 'panel.stageNext', 'panel.stageMax', 'flash.evolve', 'colony.totalSessions', 'colony.allSessions']) {
+    for (const key of ['panel.title', 'panel.rings', 'panel.tools', 'panel.openColony', 'flash.molt', 'colony.title', 'colony.tab', 'species.engineer', 'species.explorer', 'species.scribe', 'species.scholar', 'stage.adult', 'stage.mythic', 'panel.stage', 'panel.stageNext', 'panel.stageMax', 'flash.evolve', 'colony.totalSessions', 'colony.allSessions', 'a11y.pet', 'panel.diary', 'morph.crystal', 'morph.scrappy', 'morph.ancient', 'diary.meal', 'diary.molt', 'diary.errors', 'diary.morph', 'diary.breed', 'diary.moltEntry']) {
       assert.equal(typeof json[key], 'string', file + ' is missing ' + key)
     }
     // Every life stage the widget can render must have locale copy.

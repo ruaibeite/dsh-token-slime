@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import {
   ROUTE,
   SLIME_PROJECTION,
+  MOLT_LOG_CAP,
   aggregateColony,
   apply,
   categoryOfTool,
@@ -135,8 +136,39 @@ test('a retried attempt replaces its own sample instead of double counting', () 
 test('fold returns the same reference for ignored events', () => {
   const state = initSlimeState()
   assert.equal(foldSlime(state, { type: 'turn/start', data: {} }), state)
-  assert.equal(foldSlime(state, { type: 'user/message', data: {} }), state)
+  assert.equal(foldSlime(state, { type: 'step/end', data: {} }), state)
   assert.equal(foldSlime(state, null), state)
+})
+
+test('fold tracks errors, retries, activity time, and the molt diary', () => {
+  let state = initSlimeState()
+  state = foldSlime(state, { type: 'tool/result', time: 1000, data: { message: { isError: true } } })
+  state = foldSlime(state, { type: 'tool/result', time: 2000, data: { message: { isError: false } } })
+  state = foldSlime(state, { type: 'tool/result', time: 3000, data: { message: { isError: true } } })
+  assert.equal(state.errors, 2)
+  assert.equal(state.lastErrorAt, 3000)
+  assert.equal(state.lastActivityAt, 3000)
+  state = foldSlime(state, { type: 'llm/retry-started', time: 4000, data: { turn: 9, step: 9 } })
+  assert.equal(state.retries, 1)
+  assert.equal(state.lastActivityAt, 4000)
+  state = foldSlime(state, { type: 'compaction/start', time: 5000, data: {} })
+  state = foldSlime(state, { type: 'compaction/start', time: 6000, data: {} })
+  assert.equal(state.compactions, 2)
+  assert.deepEqual(state.moltTimes, [5000, 6000])
+  // user/message counts as activity for idle detection.
+  state = foldSlime(state, { type: 'user/message', time: 7000, data: {} })
+  assert.equal(state.lastActivityAt, 7000)
+})
+
+test('molt diary is capped and survives a tolerant round-trip', () => {
+  let state = initSlimeState()
+  for (let i = 0; i < MOLT_LOG_CAP + 5; i += 1) {
+    state = foldSlime(state, { type: 'compaction/start', time: i, data: {} })
+  }
+  assert.equal(state.moltTimes.length, MOLT_LOG_CAP)
+  const parsed = SLIME_PROJECTION.stateSchema.parse(JSON.parse(JSON.stringify(state)))
+  assert.deepEqual(parsed.moltTimes, state.moltTimes)
+  assert.equal(parsed.errors, state.errors)
 })
 
 test('the projection publishes a validated client view', () => {

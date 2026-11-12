@@ -79,5 +79,16 @@
   "panel.stageMax": "Final form reached",
   "flash.evolve": "Evolved!",
   "colony.totalSessions": "{n} sessions total",
-  "colony.allSessions": "All sessions · by food"
+  "colony.allSessions": "All sessions · by food",
+  "a11y.pet": "Pet the slime",
+  "panel.diary": "Slime diary",
+  "morph.crystal": "Crystal",
+  "morph.scrappy": "Scrappy",
+  "morph.ancient": "Ancient",
+  "diary.meal": "I ate {n} tokens today and grew into a {stage}.",
+  "diary.molt": "I molted {n} times; every ring is a memory.",
+  "diary.errors": "Bugs startled me {n} times, but I made it through.",
+  "diary.morph": "I think I am a rare {morph}!",
+  "diary.breed": "Everyone says I am a {breed}.",
+  "diary.moltEntry": "molted"
 }

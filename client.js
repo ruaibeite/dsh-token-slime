@@ -44,6 +44,24 @@ window.__ModuleLoader__.load({
     const MOLT_MS = 2400;
     /** How long the stage-up (evolution) banner stays up. */
     const EVOLVE_MS = 2600;
+    /** No activity for this long => the slime dozes off. */
+    const IDLE_MS = 60000;
+    /** How long an error/retry reaction (hurt/dizzy) lasts. */
+    const REACTION_MS = 4000;
+    /** Context occupancy at/above which the slime looks stuffed. */
+    const STUFFED_AT = 0.85;
+    /** How often the widget re-checks time-based moods (idle, reaction decay). */
+    const MOOD_TICK_MS = 2500;
+    /** Max slimes shown living in the habitat scene. */
+    const HABITAT_MAX = 12;
+    /** A session idle this long sleeps in the habitat even during the day. */
+    const HABITAT_IDLE_MS = 300000;
+    /** Cache hit ratio at/above which a crystal morph can appear. */
+    const CRYSTAL_AT = 0.9;
+    /** Errors at/above which a scrappy morph can appear. */
+    const SCRAPPY_AT = 5;
+    /** Output tokens at/above which an ancient morph can appear. */
+    const ANCIENT_AT = 1000000;
     /** The total-colony route served by the host half. */
     const COLONY_ROUTE = '/dsh-token-slime/colony';
     /** How often the total-colony panel refreshes. */
@@ -136,6 +154,17 @@ window.__ModuleLoader__.load({
         'flash.evolve': '进化！',
         'colony.totalSessions': '共 {n} 个会话',
         'colony.allSessions': '全部会话 · 按食物排序',
+        'a11y.pet': '摸摸史莱姆',
+        'panel.diary': '史莱姆日记',
+        'morph.crystal': '水晶种',
+        'morph.scrappy': '顽强种',
+        'morph.ancient': '远古种',
+        'diary.meal': '今天吃了 {n} 个 token，长到了{stage}。',
+        'diary.molt': '蜕了 {n} 层皮，每圈年轮都是一次回忆。',
+        'diary.errors': '被 bug 吓到 {n} 次，但我挺过来了。',
+        'diary.morph': '我好像是稀有的{morph}！',
+        'diary.breed': '大家都说我是{breed}。',
+        'diary.moltEntry': '蜕皮',
       },
       en: {
         'meta.title': 'Token slime',
@@ -216,6 +245,17 @@ window.__ModuleLoader__.load({
         'flash.evolve': 'Evolved!',
         'colony.totalSessions': '{n} sessions total',
         'colony.allSessions': 'All sessions · by food',
+        'a11y.pet': 'Pet the slime',
+        'panel.diary': 'Slime diary',
+        'morph.crystal': 'Crystal',
+        'morph.scrappy': 'Scrappy',
+        'morph.ancient': 'Ancient',
+        'diary.meal': 'I ate {n} tokens today and grew into a {stage}.',
+        'diary.molt': 'I molted {n} times; every ring is a memory.',
+        'diary.errors': 'Bugs startled me {n} times, but I made it through.',
+        'diary.morph': 'I think I am a rare {morph}!',
+        'diary.breed': 'Everyone says I am a {breed}.',
+        'diary.moltEntry': 'molted',
       },
     };
 
@@ -266,6 +306,15 @@ window.__ModuleLoader__.load({
       if (!Number.isFinite(ratio)) return '0%';
       const pct = ratio * 100;
       return (pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10) + '%';
+    }
+
+    /** Local HH:MM for a diary timestamp. */
+    function fmtClock(ms) {
+      const t = num(ms);
+      if (t <= 0) return '--:--';
+      const d = new Date(t);
+      const pad = (n) => String(n).padStart(2, '0');
+      return pad(d.getHours()) + ':' + pad(d.getMinutes());
     }
 
     // ---- growth model (mirrored in index.js for the aggregate) ---------
@@ -332,6 +381,52 @@ window.__ModuleLoader__.load({
         toNext: next === null ? 0 : Math.max(0, next.at - f),
         progress: next === null ? 1 : clamp(span > 0 ? (f - stage.at) / span : 0, 0, 1),
       };
+    }
+
+    // ---- mood, morphs, diary, habitat ---------------------------------
+    /** Whether the session has been quiet long enough for the slime to doze. */
+    function isIdle(lastActivityAt, now) {
+      const t = num(lastActivityAt);
+      return t > 0 && now - t > IDLE_MS;
+    }
+
+    /**
+     * A rare, emergent morph — not an unlock, just "this session happens to be
+     * one". Ancient (huge output) wins, then crystal (near-perfect cache), then
+     * scrappy (lots of errors survived).
+     * @returns 'ancient' | 'crystal' | 'scrappy' | null.
+     */
+    function morphOf(buckets, errors) {
+      if (buckets.output >= ANCIENT_AT) return 'ancient';
+      if (buckets.prompt > 0 && buckets.total >= 1000 && buckets.cacheRead / buckets.prompt >= CRYSTAL_AT) return 'crystal';
+      if (num(errors) >= SCRAPPY_AT) return 'scrappy';
+      return null;
+    }
+
+    /** Stable non-negative hash of a session id, for habitat placement. */
+    function hashId(id) {
+      const s = String(id === undefined || id === null ? '' : id);
+      let h = 0;
+      for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      return h;
+    }
+
+    /** Local-time phase driving the habitat sky: day / dusk / night. */
+    function dayPhase(hour) {
+      if (hour >= 20 || hour < 6) return 'night';
+      if ((hour >= 17 && hour < 20) || (hour >= 6 && hour < 8)) return 'dusk';
+      return 'day';
+    }
+
+    /** A few soft, first-person musings for the diary, derived from state. */
+    function diaryLines(tr, c) {
+      const lines = [];
+      lines.push(tr('diary.meal').replace('{n}', fmtCompact(c.buckets.output)).replace('{stage}', tr('stage.' + c.stage.key)));
+      if (c.compactions > 0) lines.push(tr('diary.molt').replace('{n}', String(c.compactions)));
+      if (c.errors > 0) lines.push(tr('diary.errors').replace('{n}', String(c.errors)));
+      if (c.morph) lines.push(tr('diary.morph').replace('{morph}', tr('morph.' + c.morph)));
+      lines.push(tr('diary.breed').replace('{breed}', tr(c.breed.key)));
+      return lines;
     }
 
     // ---- tool diet ----------------------------------------------------
@@ -499,6 +594,24 @@ window.__ModuleLoader__.load({
       '.tsl-colony-list{max-height:340px;overflow-y:auto}',
       '.tsl-aura{animation:tsl-aura 2.4s ease-in-out infinite}',
       '.tsl-sparkles{animation:tsl-twinkle 1.8s ease-in-out infinite}',
+      '.tsl-root{gap:2px}',
+      '.tsl-pet{display:inline-flex;align-items:center;padding:2px;margin:0;border:1px solid transparent;border-radius:10px;background:transparent;cursor:pointer;line-height:1;transition:background .15s ease,border-color .15s ease}',
+      '.tsl-pet:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.1));border-color:var(--dsw-alias-border-l1,rgba(127,127,127,.18))}',
+      '.tsl-pet:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4c6ef5);outline-offset:1px}',
+      '.tsl-heart{font-size:12px}',
+      '.tsl-habitat{position:relative;height:120px;border-radius:12px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1,#e6e6e6);margin-bottom:2px}',
+      '.tsl-celestial{position:absolute;top:8px;right:10px;opacity:.95}',
+      '.tsl-hab-slime{position:absolute;bottom:12px;transform:translateX(-50%);animation:tsl-hab-bob 3.2s ease-in-out infinite}',
+      '.tsl-hab-ground{position:absolute;bottom:0;left:0;right:0;height:12px}',
+      '.tsl-hab-shell{position:absolute;bottom:8px;transform:translateX(-50%);opacity:.9}',
+      '.tsl-hab-zzz{position:absolute;top:8px;left:12px;color:rgba(255,255,255,.75);font-size:11px;letter-spacing:2px;animation:tsl-zzz 2.6s ease-in-out infinite}',
+      '.tsl-diary{display:flex;flex-direction:column;gap:3px;padding:8px;border-radius:8px;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.06))}',
+      '.tsl-diary-line{margin:0;font-size:10.5px;line-height:1.5;color:var(--dsw-alias-label-primary,#1a1a1a)}',
+      '.tsl-diary-molt{margin:0;font-size:9.5px;line-height:1.4;color:var(--dsw-alias-label-tertiary,#8a8a8a)}',
+      '.tsl-sweat{animation:tsl-drip 1.6s ease-in-out infinite}',
+      '@keyframes tsl-hab-bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-3px)}}',
+      '@keyframes tsl-drip{0%,100%{opacity:.5;transform:translateY(0)}50%{opacity:1;transform:translateY(2px)}}',
+      '@keyframes tsl-zzz{0%,100%{opacity:.4}50%{opacity:.9}}',
       '@keyframes tsl-aura{0%,100%{opacity:.14}50%{opacity:.3}}',
       '@keyframes tsl-twinkle{0%,100%{opacity:.4}50%{opacity:1}}',
       '@keyframes tsl-breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.06,.94)}}',
@@ -508,7 +621,7 @@ window.__ModuleLoader__.load({
       '@keyframes tsl-molt{0%{opacity:.55;transform:translate(0,0) scale(1)}70%{opacity:.28}100%{opacity:0;transform:translate(4px,-10px) scale(1.12)}}',
       '@keyframes tsl-float{0%{opacity:0;transform:translate(-50%,4px) scale(.9)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-26px) scale(1.05)}}',
       '@keyframes tsl-pop{0%{opacity:0;transform:scale(.94) translateY(4px)}100%{opacity:1;transform:scale(1) translateY(0)}}',
-      '@media (prefers-reduced-motion: reduce){.tsl-breathe,.tsl-bounce,.tsl-egg,.tsl-blink,.tsl-molt,.tsl-aura,.tsl-sparkles{animation:none!important}.tsl-float{animation-duration:.01s!important}}',
+      '@media (prefers-reduced-motion: reduce){.tsl-breathe,.tsl-bounce,.tsl-egg,.tsl-blink,.tsl-molt,.tsl-aura,.tsl-sparkles,.tsl-hab-slime,.tsl-sweat,.tsl-hab-zzz{animation:none!important}.tsl-float{animation-duration:.01s!important}}',
     ].join('\n');
 
     // ---- art -----------------------------------------------------------
@@ -558,7 +671,20 @@ window.__ModuleLoader__.load({
       return null;
     }
 
-    /** The slime itself (also used, smaller, for colony members). */
+    /** A small adhesive bandage patch (hurt reaction / scrappy morph). */
+    function Bandage(props) {
+      const x = props.x;
+      const y = props.y;
+      const rot = props.rot || 0;
+      return h(
+        'g',
+        { transform: 'translate(' + x + ' ' + y + ') rotate(' + rot + ')', className: 'tsl-bandage' },
+        h('rect', { x: -6, y: -2.6, width: 12, height: 5.2, rx: 2.6, fill: '#f3e2c7', stroke: '#d9bd93', strokeWidth: 0.8 }),
+        h('path', { d: 'M-2 -2.6v5.2M2 -2.6v5.2', stroke: '#d9bd93', strokeWidth: 0.8 }),
+      );
+    }
+
+    /** The slime itself (also used, smaller, for colony members and the habitat). */
     function SlimeArt(props) {
       const size = props.size || 30;
       const gen = num(props.gen);
@@ -570,6 +696,9 @@ window.__ModuleLoader__.load({
       const rings = ringsOf(props.rings);
       const species = typeof props.species === 'string' ? props.species : '';
       const stageIdx = clamp(Math.floor(num(props.stage)), 0, STAGES.length - 1);
+      const mood = typeof props.mood === 'string' ? props.mood : 'content';
+      const morph = typeof props.morph === 'string' ? props.morph : null;
+      const fullness = clamp(num(props.fullness), 0, 1);
 
       if (egg) {
         return h(
@@ -587,17 +716,33 @@ window.__ModuleLoader__.load({
         );
       }
 
-      const sat = clamp(60 + gen * 2, 60, 78);
-      const light = clamp(57 - gen * 1.4, 42, 57);
+      // Rare morphs recolor the body; otherwise the breed hue + generation do.
+      let bodyHue = (hue + gen * 6) % 360;
+      let sat = clamp(60 + gen * 2, 60, 78);
+      let light = clamp(57 - gen * 1.4, 42, 57);
+      if (morph === 'crystal') {
+        bodyHue = 185;
+        sat = 48;
+        light = 80;
+      } else if (morph === 'ancient') {
+        bodyHue = 72;
+        sat = 24;
+        light = 50;
+      }
       const deepLight = clamp(light - 14, 26, 50);
-      const bodyHue = (hue + gen * 6) % 360;
-      const scale = clamp(0.58 + 0.07 * stageIdx + 0.3 * progress, 0.5, 1.04);
+      const ink = '#123a29';
+
+      // Fullness widens the body as the context fills up.
+      const fullFactor = clamp((fullness - 0.5) / 0.5, 0, 1);
+      const scaleBase = clamp(0.58 + 0.07 * stageIdx + 0.3 * progress, 0.5, 1.04);
+      const scaleX = scaleBase * (1 + 0.16 * fullFactor);
+      const scaleY = scaleBase * (1 - 0.05 * fullFactor);
       const blinkDelay = ((gen * 0.83) % 5.2).toFixed(2) + 's';
-      // Higher life stages glow; the mythic stage also sparkles.
-      const aura = stageIdx >= 4
-        ? h('ellipse', { className: 'tsl-aura', cx: 32, cy: 36, rx: 30, ry: 28, fill: 'hsl(' + bodyHue + ' 85% 72%)', opacity: stageIdx >= 5 ? 0.3 : 0.16 })
+
+      const aura = stageIdx >= 4 || morph === 'crystal'
+        ? h('ellipse', { className: 'tsl-aura', cx: 32, cy: 36, rx: 30, ry: 28, fill: 'hsl(' + bodyHue + ' 85% 72%)', opacity: stageIdx >= 5 || morph === 'crystal' ? 0.3 : 0.16 })
         : null;
-      const sparkles = stageIdx >= 5
+      const sparkles = stageIdx >= 5 || morph === 'crystal'
         ? h(
             'g',
             { className: 'tsl-sparkles' },
@@ -638,25 +783,98 @@ window.__ModuleLoader__.load({
         );
       }
 
-      const mouth = excited
-        ? h('path', { d: 'M26 42.5q6 7 12 0z', fill: '#123a29', opacity: 0.85 })
-        : h('path', {
-            d: 'M28 43.5q4 4 8 0',
-            fill: 'none',
-            stroke: '#123a29',
-            strokeWidth: 2.2,
-            strokeLinecap: 'round',
-          });
+      // Eyes follow the mood.
+      let eyes;
+      if (mood === 'sleepy') {
+        eyes = h(
+          'g',
+          { stroke: ink, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' },
+          h('path', { d: 'M20 36q4 3 8 0' }),
+          h('path', { d: 'M37 36q4 3 8 0' }),
+        );
+      } else if (mood === 'dizzy') {
+        eyes = h(
+          'g',
+          { stroke: ink, strokeWidth: 1.8, fill: 'none', strokeLinecap: 'round' },
+          h('path', { d: 'M21 35a3 3 0 1 1 6 0a1.6 1.6 0 1 1 -3.2 0' }),
+          h('path', { d: 'M38 35a3 3 0 1 1 6 0a1.6 1.6 0 1 1 -3.2 0' }),
+        );
+      } else if (mood === 'hurt') {
+        eyes = h(
+          'g',
+          { stroke: ink, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' },
+          h('path', { d: 'M21 33l6 4M27 33l-6 4' }),
+          h('path', { d: 'M38 33l6 4M44 33l-6 4' }),
+        );
+      } else if (mood === 'happy') {
+        eyes = h(
+          'g',
+          { stroke: ink, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' },
+          h('path', { d: 'M20 36q4 -5 8 0' }),
+          h('path', { d: 'M37 36q4 -5 8 0' }),
+        );
+      } else {
+        eyes = h(
+          'g',
+          { className: 'tsl-blink', style: { animationDelay: blinkDelay } },
+          h('circle', { cx: 24, cy: 35.5, r: 4.5, fill: ink }),
+          h('circle', { cx: 41, cy: 35.5, r: 4.5, fill: ink }),
+          h('circle', { cx: 25.6, cy: 33.8, r: 1.55, fill: '#ffffff' }),
+          h('circle', { cx: 42.6, cy: 33.8, r: 1.55, fill: '#ffffff' }),
+        );
+      }
+
+      // Mouth follows the mood.
+      let mouth;
+      if (mood === 'happy' || excited) {
+        mouth = h('path', { d: 'M26 42.5q6 7 12 0z', fill: ink, opacity: 0.85 });
+      } else if (mood === 'hurt' || mood === 'dizzy') {
+        mouth = h('path', { d: 'M27 45q2 -2.5 4 0q2 2.5 4 0', fill: 'none', stroke: ink, strokeWidth: 2, strokeLinecap: 'round' });
+      } else if (mood === 'stuffed' || mood === 'sleepy') {
+        mouth = h('ellipse', { cx: 32, cy: 44.5, rx: 2.4, ry: 3, fill: ink, opacity: 0.8 });
+      } else {
+        mouth = h('path', { d: 'M28 43.5q4 4 8 0', fill: 'none', stroke: ink, strokeWidth: 2.2, strokeLinecap: 'round' });
+      }
+
+      // Mood / morph accessories.
+      const extras = [];
+      if (mood === 'hurt') extras.push(h(Bandage, { key: 'band', x: 46, y: 44, rot: -20 }));
+      if (morph === 'scrappy') {
+        extras.push(h(Bandage, { key: 'sb1', x: 45, y: 45, rot: -24 }));
+        extras.push(h(Bandage, { key: 'sb2', x: 20, y: 47, rot: 18 }));
+      }
+      if (mood === 'stuffed') {
+        extras.push(h('path', { key: 'sweat', className: 'tsl-sweat', d: 'M50 18q3 4.5 0 6.5q-3 -2 0 -6.5', fill: '#7ec8e3' }));
+      }
+      if (mood === 'sleepy') {
+        extras.push(h('text', { key: 'zzz', x: 46, y: 14, fontSize: 9, fill: ink, opacity: 0.7, className: 'tsl-zzz' }, 'z z'));
+      }
+      if (morph === 'crystal') {
+        extras.push(h('path', { key: 'gem', d: 'M32 3l4 5l-4 5l-4 -5z', fill: '#bfeef7', stroke: '#8fd4e6', strokeWidth: 0.8 }));
+      }
+      if (morph === 'ancient') {
+        extras.push(h('path', { key: 'brow', d: 'M19 29q5 -3 10 0M36 29q5 -3 10 0', stroke: ink, strokeWidth: 1.6, fill: 'none', strokeLinecap: 'round', opacity: 0.7 }));
+      }
 
       return h(
         'svg',
-        { width: size, height: size, viewBox: '0 0 64 64', 'aria-hidden': true, className: 'tsl-art', 'data-species': species, 'data-stage': STAGES[stageIdx].key },
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 64 64',
+          'aria-hidden': true,
+          className: 'tsl-art',
+          'data-species': species,
+          'data-stage': STAGES[stageIdx].key,
+          'data-mood': mood,
+          'data-morph': morph === null ? '' : morph,
+        },
         h(
           'g',
-          { className: excited ? 'tsl-bounce' : 'tsl-breathe' },
+          { className: excited || mood === 'happy' ? 'tsl-bounce' : 'tsl-breathe' },
           h(
             'g',
-            { transform: 'translate(32 34) scale(' + scale + ') translate(-32 -34)' },
+            { transform: 'translate(32 34) scale(' + scaleX + ' ' + scaleY + ') translate(-32 -34)' },
             aura,
             h('path', { d: BODY_PATH, fill: 'hsl(' + bodyHue + ' ' + sat + '% ' + light + '%)' }),
             h('ellipse', {
@@ -670,16 +888,10 @@ window.__ModuleLoader__.load({
             }),
             ringMarks.length > 0 ? h('g', { className: 'tsl-rings' }, ringMarks) : null,
             spots.length > 0 ? h('g', null, spots) : null,
-            h(
-              'g',
-              { className: 'tsl-blink', style: { animationDelay: blinkDelay } },
-              h('circle', { cx: 24, cy: 35.5, r: 4.5, fill: '#123a29' }),
-              h('circle', { cx: 41, cy: 35.5, r: 4.5, fill: '#123a29' }),
-              h('circle', { cx: 25.6, cy: 33.8, r: 1.55, fill: '#ffffff' }),
-              h('circle', { cx: 42.6, cy: 33.8, r: 1.55, fill: '#ffffff' }),
-            ),
+            eyes,
             mouth,
             h(BreedMark, { hat }),
+            extras.length > 0 ? h('g', { className: 'tsl-extras' }, extras) : null,
             sparkles,
           ),
         ),
@@ -822,6 +1034,11 @@ window.__ModuleLoader__.load({
       const accent = 'hsl(' + ((breed.hue + colony.gen * 6) % 360) + ' 62% 46%)';
       const rings = ringsOf(compactions);
       const stage = stageOf(buckets.output);
+      const errors = num(unwrap(vitals).errors);
+      const retries = num(unwrap(vitals).retries);
+      const lastActivityAt = num(unwrap(vitals).lastActivityAt);
+      const moltTimes = Array.isArray(unwrap(vitals).moltTimes) ? unwrap(vitals).moltTimes : [];
+      const morph = morphOf(buckets, errors);
 
       const [open, setOpen] = React.useState(false);
       const [excited, setExcited] = React.useState(false);
@@ -829,14 +1046,26 @@ window.__ModuleLoader__.load({
       const [splitFlash, setSplitFlash] = React.useState(false);
       const [moltFlash, setMoltFlash] = React.useState(false);
       const [evolveFlash, setEvolveFlash] = React.useState(null);
+      const [reaction, setReaction] = React.useState(null);
+      const [petFlash, setPetFlash] = React.useState(false);
+      const [now, setNow] = React.useState(() => Date.now());
       const rootRef = React.useRef(null);
       const meal = React.useRef({ food: buckets.output });
       const gen = React.useRef({ value: colony.gen });
       const ringsRef = React.useRef({ value: compactions });
       const stageRef = React.useRef({ value: stage.index });
+      const errorsRef = React.useRef({ value: errors });
+      const retriesRef = React.useRef({ value: retries });
       const timers = React.useRef(null);
       if (timers.current === null) timers.current = new Set();
       const floatSeed = React.useRef(0);
+
+      // A slow heartbeat so time-based moods (idle doze, reaction decay) update
+      // even when no new projection value arrives.
+      React.useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), MOOD_TICK_MS);
+        return () => clearInterval(id);
+      }, []);
 
       // Clear every pending timer on unmount.
       React.useEffect(
@@ -906,6 +1135,21 @@ window.__ModuleLoader__.load({
         if (timers.current !== null) timers.current.add(done);
       }, [stage.index]);
 
+      // An error hurts; a retry on top of it makes the slime dizzy.
+      React.useEffect(() => {
+        const beforeErrors = errorsRef.current.value;
+        const beforeRetries = retriesRef.current.value;
+        errorsRef.current.value = errors;
+        retriesRef.current.value = retries;
+        if (errors <= beforeErrors && retries <= beforeRetries) return;
+        setReaction(retries > beforeRetries ? 'dizzy' : 'hurt');
+        const done = setTimeout(() => {
+          setReaction(null);
+          if (timers.current !== null) timers.current.delete(done);
+        }, REACTION_MS);
+        if (timers.current !== null) timers.current.add(done);
+      }, [errors, retries]);
+
       // Close the panel on an outside click or Escape.
       React.useEffect(() => {
         if (!open) return undefined;
@@ -930,6 +1174,31 @@ window.__ModuleLoader__.load({
       const restChildren = colony.gen - drawn;
       const openColony = typeof props.openColonyTab === 'function' ? props.openColonyTab : null;
 
+      // Composite mood: transient reactions win, then fullness, then idle doze.
+      const idle = isIdle(lastActivityAt, now);
+      let mood = 'content';
+      if (reaction === 'dizzy') mood = 'dizzy';
+      else if (reaction === 'hurt') mood = 'hurt';
+      else if (ctxRatio !== null && ctxRatio >= STUFFED_AT) mood = 'stuffed';
+      else if (idle && !egg) mood = 'sleepy';
+      else if (excited || petFlash) mood = 'happy';
+
+      // Petting: a happy wiggle and a heart, no numbers involved.
+      const pet = () => {
+        setPetFlash(true);
+        setExcited(true);
+        floatSeed.current += 1;
+        const id = 'h' + floatSeed.current;
+        setFloats((list) => [...list, { id, text: '♥', heart: true }].slice(-3));
+        const done = setTimeout(() => {
+          setPetFlash(false);
+          setExcited(false);
+          setFloats((list) => list.filter((item) => item.id !== id));
+          if (timers.current !== null) timers.current.delete(done);
+        }, MEAL_MS);
+        if (timers.current !== null) timers.current.add(done);
+      };
+
       // Third dock line: a transient celebration wins over the standing stage hint.
       const triggerFlash = evolveFlash !== null
         ? tr('flash.evolve') + ' ' + tr('stage.' + evolveFlash.to)
@@ -944,16 +1213,15 @@ window.__ModuleLoader__.load({
           ? tr('panel.stageMax')
           : tr('panel.stageNext').replace('{name}', tr('stage.' + stage.next)).replace('{n}', fmtCompact(stage.toNext));
 
-      const trigger = h(
+      const petButton = h(
         'button',
         {
           type: 'button',
-          className: 'tsl-trigger',
-          onClick: () => setOpen((value) => !value),
-          'aria-expanded': open ? 'true' : 'false',
-          'aria-label': tr('a11y.open'),
-          title: tr('panel.title') + ' · ' + name,
-          'data-species': breed.tool ? breed.hat : 'diet',
+          className: 'tsl-pet',
+          onClick: pet,
+          'aria-label': tr('a11y.pet'),
+          title: tr('a11y.pet'),
+          'data-mood': mood,
         },
         h(
           'span',
@@ -968,12 +1236,28 @@ window.__ModuleLoader__.load({
             hat: breed.hat,
             rings: compactions,
             stage: stage.index,
+            mood,
+            morph,
+            fullness: ctxRatio === null ? 0 : ctxRatio,
             species: breed.tool ? breed.hat : breed.key,
           }),
           floats.map((item) =>
-            h('span', { key: item.id, className: 'tsl-float', style: { color: accent } }, item.text),
+            h('span', { key: item.id, className: 'tsl-float' + (item.heart ? ' tsl-heart' : ''), style: { color: item.heart ? '#e5537a' : accent } }, item.text),
           ),
         ),
+      );
+
+      const trigger = h(
+        'button',
+        {
+          type: 'button',
+          className: 'tsl-trigger',
+          onClick: () => setOpen((value) => !value),
+          'aria-expanded': open ? 'true' : 'false',
+          'aria-label': tr('a11y.open'),
+          title: tr('panel.title') + ' · ' + name,
+          'data-species': breed.tool ? breed.hat : 'diet',
+        },
         h(
           'span',
           { style: { display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' } },
@@ -997,6 +1281,24 @@ window.__ModuleLoader__.load({
               },
               tr('stage.' + stage.key),
             ),
+            morph !== null
+              ? h(
+                  'span',
+                  {
+                    style: {
+                      fontSize: 9,
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      padding: '1px 5px',
+                      borderRadius: 999,
+                      color: '#8a6d1a',
+                      background: 'rgba(245,197,66,.25)',
+                    },
+                    'data-morph-badge': morph,
+                  },
+                  tr('morph.' + morph),
+                )
+              : null,
             h(
               'span',
               {
@@ -1349,6 +1651,25 @@ window.__ModuleLoader__.load({
           toolRows,
           dietBlock,
           traitRow,
+          h(
+            'div',
+            { style: { marginBottom: 8 }, 'data-diary': '1' },
+            h(
+              'div',
+              { style: { fontSize: 10.5, marginBottom: 4, color: 'var(--dsw-alias-label-secondary, #6b6b6b)' } },
+              tr('panel.diary'),
+            ),
+            h(
+              'div',
+              { className: 'tsl-diary' },
+              diaryLines(tr, { buckets, stage, breed, morph, compactions, errors }).map((line, i) =>
+                h('p', { key: 'd' + i, className: 'tsl-diary-line' }, line),
+              ),
+              moltTimes.slice(-3).reverse().map((t, i) =>
+                h('p', { key: 'm' + i, className: 'tsl-diary-molt' }, '· ' + fmtClock(t) + ' ' + tr('diary.moltEntry')),
+              ),
+            ),
+          ),
           openColony !== null
             ? h(
                 'button',
@@ -1373,8 +1694,9 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'tsl-root', ref: rootRef, 'data-rings': String(compactions) },
+        { className: 'tsl-root', ref: rootRef, 'data-rings': String(compactions), 'data-morph': morph === null ? '' : morph },
         h('style', null, CSS),
+        petButton,
         trigger,
         panel,
       );
@@ -1394,6 +1716,92 @@ window.__ModuleLoader__.load({
     function speciesLabel(tr, species) {
       if (species === null || species === undefined) return tr('species.moss');
       return tr('species.' + species);
+    }
+
+    /** A tiny sun / moon / shell glyph for the habitat scene. */
+    function HabitatGlyph(props) {
+      if (props.kind === 'sun') {
+        return h(
+          'svg',
+          { width: 22, height: 22, viewBox: '0 0 24 24', 'aria-hidden': true },
+          h('circle', { cx: 12, cy: 12, r: 5.5, fill: '#ffd75e' }),
+          h('g', { stroke: '#ffd75e', strokeWidth: 1.6, strokeLinecap: 'round' },
+            h('path', { d: 'M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1' })),
+        );
+      }
+      if (props.kind === 'moon') {
+        return h(
+          'svg',
+          { width: 20, height: 20, viewBox: '0 0 24 24', 'aria-hidden': true },
+          h('path', { d: 'M15 3a9 9 0 1 0 6 15a8 8 0 0 1 -6 -15z', fill: '#f0e9c8' }),
+        );
+      }
+      return h(
+        'svg',
+        { width: 14, height: 12, viewBox: '0 0 20 16', 'aria-hidden': true },
+        h('path', { d: 'M10 15L2 6a10 10 0 0 1 16 0z', fill: '#e8d8c0', stroke: '#c9b291', strokeWidth: 1 }),
+        h('path', { d: 'M10 15V4M10 15L5 6M10 15l5 -9', stroke: '#c9b291', strokeWidth: 0.8 }),
+      );
+    }
+
+    /**
+     * A living terrarium for the colony: a sky that follows the local clock,
+     * session slimes that doze when their session is idle (or at night), and
+     * shed shells scattered on the ground.
+     */
+    function Habitat(props) {
+      const sessions = Array.isArray(props.sessions) ? props.sessions : [];
+      const total = props.total === undefined ? null : props.total;
+      const phase = dayPhase(new Date().getHours());
+      const night = phase === 'night';
+      const sky = night
+        ? 'linear-gradient(180deg,#141b33,#26304f)'
+        : phase === 'dusk'
+          ? 'linear-gradient(180deg,#f6c17b,#e2926b)'
+          : 'linear-gradient(180deg,#bfe3f7,#e9f5fb)';
+      const ground = night ? '#1f2740' : phase === 'dusk' ? '#8a6a4f' : '#9fce8f';
+      const shown = sessions.slice(0, HABITAT_MAX);
+      const shells = clamp(num(total === null ? 0 : total.compactions), 0, 6);
+      const now = Date.now();
+
+      return h(
+        'div',
+        { className: 'tsl-habitat', 'data-phase': phase, style: { background: sky } },
+        h('div', { className: 'tsl-celestial' }, h(HabitatGlyph, { kind: night ? 'moon' : 'sun' })),
+        shown.map((s, i) => {
+          const hash = hashId(s.id);
+          const x = 4 + (hash % 88);
+          const lastAct = num(s.lastActivityAt);
+          const sleepy = night || (lastAct > 0 && now - lastAct > HABITAT_IDLE_MS);
+          const hue = s.species !== null && s.species !== undefined && TOOL_HUES[s.species] !== undefined ? TOOL_HUES[s.species] : 150;
+          const size = 22 + (hash % 3) * 4;
+          return h(
+            'div',
+            {
+              key: s.id === undefined ? 'hab-' + i : String(s.id),
+              className: 'tsl-hab-slime',
+              style: { left: x + '%', animationDelay: ((hash % 7) * 0.4).toFixed(2) + 's' },
+              title: s.title === null || s.title === undefined ? '' : String(s.title),
+            },
+            h(SlimeArt, {
+              size,
+              hue,
+              gen: num(s.gen),
+              progress: clamp(num(s.progress), 0, 1),
+              hat: s.species === null || s.species === undefined ? null : s.species,
+              rings: num(s.compactions),
+              stage: stageOf(num(s.outputTokens)).index,
+              mood: sleepy ? 'sleepy' : 'content',
+              species: s.species === null || s.species === undefined ? 'diet' : s.species,
+            }),
+          );
+        }),
+        Array.from({ length: shells }, (_, i) =>
+          h('div', { key: 'shell-' + i, className: 'tsl-hab-shell', style: { left: 8 + i * 15 + '%' } }, h(HabitatGlyph, { kind: 'shell' })),
+        ),
+        h('div', { className: 'tsl-hab-ground', style: { background: ground } }),
+        night ? h('div', { className: 'tsl-hab-zzz' }, 'z z z') : null,
+      );
     }
 
     /** The right-sidebar tab body: the colony across every stored session. */
@@ -1557,7 +1965,7 @@ window.__ModuleLoader__.load({
       } else if (data === null) {
         body = h('div', { className: 'tsl-colony-empty' }, tr('colony.loading'));
       } else {
-        body = h(React.Fragment, null, hero, chips, mix, rows);
+        body = h(React.Fragment, null, h(Habitat, { sessions, total, tr }), hero, chips, mix, rows);
       }
 
       return h(
@@ -1673,6 +2081,18 @@ window.__ModuleLoader__.load({
         ringsOf,
         STAGES,
         stageOf,
+        morphOf,
+        isIdle,
+        dayPhase,
+        hashId,
+        diaryLines,
+        fmtClock,
+        IDLE_MS,
+        STUFFED_AT,
+        CRYSTAL_AT,
+        SCRAPPY_AT,
+        ANCIENT_AT,
+        HABITAT_MAX,
       },
     };
   },
