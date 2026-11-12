@@ -42,6 +42,10 @@ window.__ModuleLoader__.load({
     const SPLIT_MS = 1900;
     /** How long the molt banner stays up. */
     const MOLT_MS = 2400;
+    /** How long the stage-up (evolution) banner stays up. */
+    const EVOLVE_MS = 2600;
+    /** How long an achievement-unlock banner stays up. */
+    const ACHIEVE_MS = 2600;
     /** The total-colony route served by the host half. */
     const COLONY_ROUTE = '/dsh-token-slime/colony';
     /** How often the total-colony panel refreshes. */
@@ -122,6 +126,49 @@ window.__ModuleLoader__.load({
         'name.7': '年轮',
         'name.8': '结晶',
         'name.9': '老黏',
+        'stage.egg': '蛋',
+        'stage.hatchling': '幼体',
+        'stage.juvenile': '少年',
+        'stage.adult': '成体',
+        'stage.elder': '长老',
+        'stage.mythic': '传说',
+        'panel.stage': '成长阶段',
+        'panel.stageNext': '距「{name}」还差 {n} token',
+        'panel.stageMax': '已是最终形态',
+        'panel.achievements': '成就',
+        'goal.hint': '🎯 {name} · 还差 {n}',
+        'goal.allDone': '🏆 全部成就达成！',
+        'flash.evolve': '进化！',
+        'colony.totalSessions': '共 {n} 个会话',
+        'colony.allSessions': '全部会话 · 按食物排序',
+        'ach.firstMeal.name': '破壳而出',
+        'ach.firstMeal.desc': '吃到第一口 token',
+        'ach.firstSplit.name': '初次分裂',
+        'ach.firstSplit.desc': '完成第一次分裂',
+        'ach.colony5.name': '五世其昌',
+        'ach.colony5.desc': '族群达到 5 代',
+        'ach.engineer30.name': '代码工匠',
+        'ach.engineer30.desc': '调用代码/执行类工具 30 次',
+        'ach.explorer15.name': '网络探险家',
+        'ach.explorer15.desc': '调用网络探索类工具 15 次',
+        'ach.scribe10.name': '著作等身',
+        'ach.scribe10.desc': '调用文档产出类工具 10 次',
+        'ach.scholar30.name': '博览群书',
+        'ach.scholar30.desc': '调用阅读检索类工具 30 次',
+        'ach.polyglot.name': '全能选手',
+        'ach.polyglot.desc': '四类工具都用过',
+        'ach.firstMolt.name': '蜕皮新生',
+        'ach.firstMolt.desc': '经历第一次上下文压缩',
+        'ach.rings3.name': '三轮年轮',
+        'ach.rings3.desc': '经历 3 次上下文压缩',
+        'ach.marathon.name': '马拉松',
+        'ach.marathon.desc': '单会话 output 达 10 万',
+        'ach.million.name': '百万传说',
+        'ach.million.desc': '单会话 output 达 100 万',
+        'ach.cacheMaster.name': '缓存大师',
+        'ach.cacheMaster.desc': '缓存命中率达 80%',
+        'ach.mythicForm.name': '传说形态',
+        'ach.mythicForm.desc': '达到最终成长阶段',
       },
       en: {
         'meta.title': 'Token slime',
@@ -190,6 +237,49 @@ window.__ModuleLoader__.load({
         'name.7': 'Ringlet',
         'name.8': 'Crystal',
         'name.9': 'Elder',
+        'stage.egg': 'Egg',
+        'stage.hatchling': 'Hatchling',
+        'stage.juvenile': 'Juvenile',
+        'stage.adult': 'Adult',
+        'stage.elder': 'Elder',
+        'stage.mythic': 'Mythic',
+        'panel.stage': 'Life stage',
+        'panel.stageNext': '{n} tokens to {name}',
+        'panel.stageMax': 'Final form reached',
+        'panel.achievements': 'Achievements',
+        'goal.hint': '🎯 {name} · {n} to go',
+        'goal.allDone': '🏆 All achievements done!',
+        'flash.evolve': 'Evolved!',
+        'colony.totalSessions': '{n} sessions total',
+        'colony.allSessions': 'All sessions · by food',
+        'ach.firstMeal.name': 'First Meal',
+        'ach.firstMeal.desc': 'Eat your first output token.',
+        'ach.firstSplit.name': 'First Split',
+        'ach.firstSplit.desc': 'Split into a colony once.',
+        'ach.colony5.name': 'Thriving Colony',
+        'ach.colony5.desc': 'Reach colony generation 5.',
+        'ach.engineer30.name': 'Code Artisan',
+        'ach.engineer30.desc': 'Run 30 code/shell tool calls.',
+        'ach.explorer15.name': 'Web Explorer',
+        'ach.explorer15.desc': 'Run 15 web tool calls.',
+        'ach.scribe10.name': 'Prolific Scribe',
+        'ach.scribe10.desc': 'Produce 10 document tool calls.',
+        'ach.scholar30.name': 'Well-Read',
+        'ach.scholar30.desc': 'Run 30 reading/search tool calls.',
+        'ach.polyglot.name': 'Polyglot',
+        'ach.polyglot.desc': 'Use all four tool categories.',
+        'ach.firstMolt.name': 'First Molt',
+        'ach.firstMolt.desc': 'Survive a context compaction.',
+        'ach.rings3.name': 'Three Rings',
+        'ach.rings3.desc': 'Survive 3 context compactions.',
+        'ach.marathon.name': 'Marathon',
+        'ach.marathon.desc': 'Reach 100k output tokens in one session.',
+        'ach.million.name': 'Millionaire',
+        'ach.million.desc': 'Reach 1M output tokens in one session.',
+        'ach.cacheMaster.name': 'Cache Master',
+        'ach.cacheMaster.desc': 'Reach an 80% cache hit rate.',
+        'ach.mythicForm.name': 'Mythic Form',
+        'ach.mythicForm.desc': 'Reach the final life stage.',
       },
     };
 
@@ -268,6 +358,94 @@ window.__ModuleLoader__.load({
         cost,
         progress: gen >= MAX_GEN ? 1 : clamp(cost > 0 ? rest / cost : 0, 0, 1),
       };
+    }
+
+    // ---- life stages (the headline growth ladder) ---------------------
+    // Named maturity stages driven by the session's cumulative output tokens.
+    // Orthogonal to the split/colony count: stage = how mature the slime looks,
+    // colony = how many times it has split. Each stage-up is celebrated.
+    const STAGES = [
+      { key: 'egg', at: 0 },
+      { key: 'hatchling', at: 1 },
+      { key: 'juvenile', at: 2500 },
+      { key: 'adult', at: 25000 },
+      { key: 'elder', at: 120000 },
+      { key: 'mythic', at: 600000 },
+    ];
+
+    /**
+     * Resolve the life stage for a food total.
+     * @param food - cumulative output tokens.
+     * @returns stage index/key, the next stage, and progress toward it.
+     */
+    function stageOf(food) {
+      const f = Math.max(0, num(food));
+      let index = 0;
+      for (let i = 0; i < STAGES.length; i += 1) {
+        if (f >= STAGES[i].at) index = i;
+      }
+      const stage = STAGES[index];
+      const next = index + 1 < STAGES.length ? STAGES[index + 1] : null;
+      const span = next === null ? 0 : next.at - stage.at;
+      return {
+        index,
+        key: stage.key,
+        at: stage.at,
+        next: next === null ? null : next.key,
+        nextAt: next === null ? null : next.at,
+        toNext: next === null ? 0 : Math.max(0, next.at - f),
+        progress: next === null ? 1 : clamp(span > 0 ? (f - stage.at) / span : 0, 0, 1),
+      };
+    }
+
+    // ---- achievements (concrete, log-derived goals) -------------------
+    // Each milestone reads a value from the session's projections and unlocks
+    // at a target. `value` receives a context object assembled by the widget.
+    const ACHIEVEMENTS = [
+      { id: 'firstMeal', icon: '🍽', target: 1, value: (c) => c.buckets.output },
+      { id: 'firstSplit', icon: '🧬', target: 1, value: (c) => c.colony.gen },
+      { id: 'colony5', icon: '👪', target: 5, value: (c) => c.colony.gen },
+      { id: 'engineer30', icon: '🔧', target: 30, value: (c) => c.counts.engineer },
+      { id: 'explorer15', icon: '🧭', target: 15, value: (c) => c.counts.explorer },
+      { id: 'scribe10', icon: '📜', target: 10, value: (c) => c.counts.scribe },
+      { id: 'scholar30', icon: '📚', target: 30, value: (c) => c.counts.scholar },
+      { id: 'polyglot', icon: '🎓', target: 4, value: (c) => TOOL_SPECIES.filter((k) => c.counts[k] > 0).length },
+      { id: 'firstMolt', icon: '🌀', target: 1, value: (c) => c.compactions },
+      { id: 'rings3', icon: '🎯', target: 3, value: (c) => c.compactions },
+      { id: 'marathon', icon: '🏃', target: 100000, value: (c) => c.buckets.output },
+      { id: 'million', icon: '💎', target: 1000000, value: (c) => c.buckets.output },
+      { id: 'cacheMaster', icon: '⚡', target: 80, value: (c) => Math.round(c.diet.cacheRatio * 100), needsPrompt: true },
+      { id: 'mythicForm', icon: '🌟', target: STAGES.length - 1, value: (c) => c.stage.index },
+    ];
+
+    /**
+     * Compute progress + unlock state for every achievement.
+     * @param c - `{ buckets, counts, compactions, colony, stage, diet }`.
+     * @returns one `{ id, icon, value, target, unlocked, progress }` per achievement.
+     */
+    function achieveState(c) {
+      return ACHIEVEMENTS.map((a) => {
+        let value = num(a.value(c));
+        if (a.needsPrompt === true && c.buckets.prompt <= 0) value = 0;
+        return {
+          id: a.id,
+          icon: a.icon,
+          value,
+          target: a.target,
+          unlocked: value >= a.target,
+          progress: clamp(a.target > 0 ? value / a.target : 0, 0, 1),
+        };
+      });
+    }
+
+    /** The locked achievement closest to unlocking (highest progress), or null. */
+    function nextGoal(achievements) {
+      let best = null;
+      for (const a of achievements) {
+        if (a.unlocked) continue;
+        if (best === null || a.progress > best.progress) best = a;
+      }
+      return best;
     }
 
     // ---- tool diet ----------------------------------------------------
@@ -409,7 +587,7 @@ window.__ModuleLoader__.load({
       '.tsl-molt{animation:tsl-molt 1.3s ease-out forwards;transform-origin:32px 54px}',
       '.tsl-ring{opacity:.55}',
       '.tsl-float{position:absolute;left:50%;top:-6px;transform:translateX(-50%);font-size:10.5px;font-weight:700;pointer-events:none;white-space:nowrap;animation:tsl-float 1.5s ease-out forwards}',
-      '.tsl-panel{position:absolute;bottom:calc(100% + 8px);left:0;z-index:40;width:288px;padding:12px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2,#d9d9d9);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#1a1a1a);box-shadow:0 10px 30px rgba(0,0,0,.18);font-size:12px;animation:tsl-pop .16s ease-out}',
+      '.tsl-panel{position:absolute;bottom:calc(100% + 8px);left:0;z-index:40;width:288px;max-height:min(430px,70vh);overflow-y:auto;padding:12px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2,#d9d9d9);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#1a1a1a);box-shadow:0 10px 30px rgba(0,0,0,.18);font-size:12px;animation:tsl-pop .16s ease-out}',
       '.tsl-panel *{box-sizing:border-box}',
       '.tsl-close{border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8a8a);font:inherit;font-size:12px;line-height:1;padding:2px 4px;border-radius:4px;cursor:pointer}',
       '.tsl-close:hover{color:var(--dsw-alias-label-primary,#1a1a1a);background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12))}',
@@ -431,6 +609,18 @@ window.__ModuleLoader__.load({
       '.tsl-colony-row-meta{flex:0 0 auto;font-size:10.5px;color:var(--dsw-alias-label-secondary,#6b6b6b);font-variant-numeric:tabular-nums}',
       '.tsl-colony-note{font-size:9.5px;line-height:1.6;color:var(--dsw-alias-label-tertiary,#8a8a8a);margin:0}',
       '.tsl-colony-empty{padding:16px 4px;font-size:11.5px;color:var(--dsw-alias-label-secondary,#6b6b6b)}',
+      '.tsl-colony-count{font-size:10.5px;font-weight:600;color:var(--dsw-alias-label-secondary,#6b6b6b);font-variant-numeric:tabular-nums}',
+      '.tsl-colony-list{max-height:340px;overflow-y:auto}',
+      '.tsl-aura{animation:tsl-aura 2.4s ease-in-out infinite}',
+      '.tsl-sparkles{animation:tsl-twinkle 1.8s ease-in-out infinite}',
+      '.tsl-ach-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}',
+      '.tsl-ach{display:flex;flex-direction:column;gap:3px;padding:6px 7px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16));background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.05));opacity:.55;min-width:0}',
+      '.tsl-ach-on{opacity:1;border-color:var(--dsw-alias-border-l2,#d9d9d9);background:var(--dsw-alias-bg-layer-1,#fff)}',
+      '.tsl-ach-icon{font-size:14px;line-height:1}',
+      '.tsl-ach-name{font-size:9.5px;line-height:1.25;color:var(--dsw-alias-label-primary,#1a1a1a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.tsl-ach-bar{display:block;width:100%}',
+      '@keyframes tsl-aura{0%,100%{opacity:.14}50%{opacity:.3}}',
+      '@keyframes tsl-twinkle{0%,100%{opacity:.4}50%{opacity:1}}',
       '@keyframes tsl-breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.06,.94)}}',
       '@keyframes tsl-bounce{0%,100%{transform:translateY(0) scale(1,1)}30%{transform:translateY(-5px) scale(.95,1.05)}62%{transform:translateY(0) scale(1.04,.96)}}',
       '@keyframes tsl-egg{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}',
@@ -438,7 +628,7 @@ window.__ModuleLoader__.load({
       '@keyframes tsl-molt{0%{opacity:.55;transform:translate(0,0) scale(1)}70%{opacity:.28}100%{opacity:0;transform:translate(4px,-10px) scale(1.12)}}',
       '@keyframes tsl-float{0%{opacity:0;transform:translate(-50%,4px) scale(.9)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-26px) scale(1.05)}}',
       '@keyframes tsl-pop{0%{opacity:0;transform:scale(.94) translateY(4px)}100%{opacity:1;transform:scale(1) translateY(0)}}',
-      '@media (prefers-reduced-motion: reduce){.tsl-breathe,.tsl-bounce,.tsl-egg,.tsl-blink,.tsl-molt{animation:none!important}.tsl-float{animation-duration:.01s!important}}',
+      '@media (prefers-reduced-motion: reduce){.tsl-breathe,.tsl-bounce,.tsl-egg,.tsl-blink,.tsl-molt,.tsl-aura,.tsl-sparkles{animation:none!important}.tsl-float{animation-duration:.01s!important}}',
     ].join('\n');
 
     // ---- art -----------------------------------------------------------
@@ -499,6 +689,7 @@ window.__ModuleLoader__.load({
       const hat = typeof props.hat === 'string' ? props.hat : null;
       const rings = ringsOf(props.rings);
       const species = typeof props.species === 'string' ? props.species : '';
+      const stageIdx = clamp(Math.floor(num(props.stage)), 0, STAGES.length - 1);
 
       if (egg) {
         return h(
@@ -520,8 +711,21 @@ window.__ModuleLoader__.load({
       const light = clamp(57 - gen * 1.4, 42, 57);
       const deepLight = clamp(light - 14, 26, 50);
       const bodyHue = (hue + gen * 6) % 360;
-      const scale = 0.64 + 0.36 * progress;
+      const scale = clamp(0.58 + 0.07 * stageIdx + 0.3 * progress, 0.5, 1.04);
       const blinkDelay = ((gen * 0.83) % 5.2).toFixed(2) + 's';
+      // Higher life stages glow; the mythic stage also sparkles.
+      const aura = stageIdx >= 4
+        ? h('ellipse', { className: 'tsl-aura', cx: 32, cy: 36, rx: 30, ry: 28, fill: 'hsl(' + bodyHue + ' 85% 72%)', opacity: stageIdx >= 5 ? 0.3 : 0.16 })
+        : null;
+      const sparkles = stageIdx >= 5
+        ? h(
+            'g',
+            { className: 'tsl-sparkles' },
+            h('circle', { cx: 9, cy: 14, r: 1.7, fill: '#ffffff', opacity: 0.95 }),
+            h('circle', { cx: 55, cy: 18, r: 1.3, fill: '#ffffff', opacity: 0.85 }),
+            h('circle', { cx: 51, cy: 51, r: 1.5, fill: '#ffffff', opacity: 0.9 }),
+          )
+        : null;
 
       const spots = [];
       for (let i = 0; i < Math.min(gen, 4); i += 1) {
@@ -566,13 +770,14 @@ window.__ModuleLoader__.load({
 
       return h(
         'svg',
-        { width: size, height: size, viewBox: '0 0 64 64', 'aria-hidden': true, className: 'tsl-art', 'data-species': species },
+        { width: size, height: size, viewBox: '0 0 64 64', 'aria-hidden': true, className: 'tsl-art', 'data-species': species, 'data-stage': STAGES[stageIdx].key },
         h(
           'g',
           { className: excited ? 'tsl-bounce' : 'tsl-breathe' },
           h(
             'g',
             { transform: 'translate(32 34) scale(' + scale + ') translate(-32 -34)' },
+            aura,
             h('path', { d: BODY_PATH, fill: 'hsl(' + bodyHue + ' ' + sat + '% ' + light + '%)' }),
             h('ellipse', {
               cx: 22.5,
@@ -595,6 +800,7 @@ window.__ModuleLoader__.load({
             ),
             mouth,
             h(BreedMark, { hat }),
+            sparkles,
           ),
         ),
       );
@@ -735,16 +941,24 @@ window.__ModuleLoader__.load({
       const breed = breedOf(diet, counts);
       const accent = 'hsl(' + ((breed.hue + colony.gen * 6) % 360) + ' 62% 46%)';
       const rings = ringsOf(compactions);
+      const stage = stageOf(buckets.output);
+      const achievements = achieveState({ buckets, counts, compactions, colony, stage, diet });
+      const goal = nextGoal(achievements);
+      const unlockedCount = achievements.filter((a) => a.unlocked).length;
 
       const [open, setOpen] = React.useState(false);
       const [excited, setExcited] = React.useState(false);
       const [floats, setFloats] = React.useState([]);
       const [splitFlash, setSplitFlash] = React.useState(false);
       const [moltFlash, setMoltFlash] = React.useState(false);
+      const [evolveFlash, setEvolveFlash] = React.useState(null);
+      const [achieveFlash, setAchieveFlash] = React.useState(null);
       const rootRef = React.useRef(null);
       const meal = React.useRef({ food: buckets.output });
       const gen = React.useRef({ value: colony.gen });
       const ringsRef = React.useRef({ value: compactions });
+      const stageRef = React.useRef({ value: stage.index });
+      const unlockedRef = React.useRef(null);
       const timers = React.useRef(null);
       if (timers.current === null) timers.current = new Set();
       const floatSeed = React.useRef(0);
@@ -804,6 +1018,38 @@ window.__ModuleLoader__.load({
         if (timers.current !== null) timers.current.add(done);
       }, [compactions]);
 
+      // A stage-up: the slime matured into a new life stage.
+      React.useEffect(() => {
+        const before = stageRef.current.value;
+        stageRef.current.value = stage.index;
+        if (stage.index <= before) return;
+        setEvolveFlash({ from: STAGES[before].key, to: STAGES[stage.index].key });
+        const done = setTimeout(() => {
+          setEvolveFlash(null);
+          if (timers.current !== null) timers.current.delete(done);
+        }, EVOLVE_MS);
+        if (timers.current !== null) timers.current.add(done);
+      }, [stage.index]);
+
+      // Achievement unlocks: celebrate newly reached milestones (not history).
+      React.useEffect(() => {
+        const unlockedNow = achievements.filter((a) => a.unlocked).map((a) => a.id);
+        if (unlockedRef.current === null) {
+          unlockedRef.current = new Set(unlockedNow);
+          return;
+        }
+        const fresh = unlockedNow.filter((id) => !unlockedRef.current.has(id));
+        for (const id of fresh) unlockedRef.current.add(id);
+        if (fresh.length === 0) return;
+        const last = achievements.find((a) => a.id === fresh[fresh.length - 1]);
+        setAchieveFlash(last);
+        const done = setTimeout(() => {
+          setAchieveFlash(null);
+          if (timers.current !== null) timers.current.delete(done);
+        }, ACHIEVE_MS);
+        if (timers.current !== null) timers.current.add(done);
+      }, [achievements]);
+
       // Close the panel on an outside click or Escape.
       React.useEffect(() => {
         if (!open) return undefined;
@@ -828,6 +1074,22 @@ window.__ModuleLoader__.load({
       const restChildren = colony.gen - drawn;
       const openColony = typeof props.openColonyTab === 'function' ? props.openColonyTab : null;
 
+      // Third dock line: a transient celebration wins over the standing goal hint.
+      const triggerFlash = evolveFlash !== null
+        ? tr('flash.evolve') + ' ' + tr('stage.' + evolveFlash.to)
+        : achieveFlash !== null
+          ? '🏆 ' + tr('ach.' + achieveFlash.id + '.name')
+          : splitFlash
+            ? tr('flash.split')
+            : moltFlash
+              ? tr('flash.molt')
+              : null;
+      const triggerLine = triggerFlash !== null
+        ? triggerFlash
+        : goal !== null
+          ? tr('goal.hint').replace('{name}', tr('ach.' + goal.id + '.name')).replace('{n}', fmtCompact(Math.max(0, goal.target - goal.value)))
+          : tr('goal.allDone');
+
       const trigger = h(
         'button',
         {
@@ -851,6 +1113,7 @@ window.__ModuleLoader__.load({
             egg,
             hat: breed.hat,
             rings: compactions,
+            stage: stage.index,
             species: breed.tool ? breed.hat : breed.key,
           }),
           floats.map((item) =>
@@ -868,6 +1131,22 @@ window.__ModuleLoader__.load({
               'span',
               {
                 style: {
+                  fontSize: 9,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  padding: '1px 5px',
+                  borderRadius: 999,
+                  color: accent,
+                  border: '1px solid ' + accent,
+                  opacity: 0.95,
+                },
+              },
+              tr('stage.' + stage.key),
+            ),
+            h(
+              'span',
+              {
+                style: {
                   fontSize: 9.5,
                   fontWeight: 500,
                   whiteSpace: 'nowrap',
@@ -876,38 +1155,25 @@ window.__ModuleLoader__.load({
               },
               egg ? 'egg' : genText,
             ),
-            splitFlash
-              ? h(
-                  'span',
-                  {
-                    style: {
-                      fontSize: 9.5,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      color: accent,
-                      animation: 'tsl-pop .3s ease-out',
-                    },
-                  },
-                  tr('flash.split'),
-                )
-              : null,
-            moltFlash
-              ? h(
-                  'span',
-                  {
-                    style: {
-                      fontSize: 9.5,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      color: accent,
-                      animation: 'tsl-pop .3s ease-out',
-                    },
-                  },
-                  tr('flash.molt'),
-                )
-              : null,
           ),
-          h('span', { style: { width: 46 } }, h(Bar, { value: egg ? 0 : colony.progress, color: accent, height: 3 })),
+          h('span', { style: { width: 60 } }, h(Bar, { value: egg ? 0 : stage.progress, color: accent, height: 3 })),
+          h(
+            'span',
+            {
+              style: {
+                fontSize: 9,
+                lineHeight: 1.2,
+                maxWidth: 150,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                fontWeight: triggerFlash !== null ? 700 : 500,
+                color: triggerFlash !== null ? accent : 'var(--dsw-alias-label-tertiary, #8a8a8a)',
+                animation: triggerFlash !== null ? 'tsl-pop .3s ease-out' : 'none',
+              },
+            },
+            triggerLine,
+          ),
         ),
       );
 
@@ -1150,6 +1416,79 @@ window.__ModuleLoader__.load({
               )
             : null;
 
+        const stageLadder = h(
+          'div',
+          { style: { marginBottom: 10 } },
+          h(
+            'div',
+            { style: { fontSize: 10.5, marginBottom: 4, color: 'var(--dsw-alias-label-secondary, #6b6b6b)' } },
+            tr('panel.stage') + ' · ' + tr('stage.' + stage.key),
+          ),
+          h(Bar, { value: stage.progress, color: accent, height: 5 }),
+          h(
+            'div',
+            { style: { marginTop: 4, fontSize: 10, color: 'var(--dsw-alias-label-tertiary, #8a8a8a)' } },
+            stage.next === null
+              ? tr('panel.stageMax')
+              : tr('panel.stageNext').replace('{name}', tr('stage.' + stage.next)).replace('{n}', fmtCompact(stage.toNext)),
+          ),
+          h(
+            'div',
+            { style: { display: 'flex', gap: 3, marginTop: 5 } },
+            STAGES.map((s, i) =>
+              h('span', {
+                key: s.key,
+                title: tr('stage.' + s.key),
+                style: {
+                  flex: '1 1 0',
+                  height: 4,
+                  borderRadius: 999,
+                  background: i <= stage.index ? accent : 'var(--dsw-alias-border-l1, rgba(127,127,127,.18))',
+                  opacity: i <= stage.index ? 1 : 0.6,
+                },
+              }),
+            ),
+          ),
+        );
+
+        const achShelf = h(
+          'div',
+          { style: { marginBottom: 8 } },
+          h(
+            'div',
+            {
+              style: {
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: 10.5,
+                marginBottom: 4,
+                color: 'var(--dsw-alias-label-secondary, #6b6b6b)',
+              },
+            },
+            h('span', null, tr('panel.achievements')),
+            h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, unlockedCount + ' / ' + achievements.length),
+          ),
+          h(
+            'div',
+            { className: 'tsl-ach-grid' },
+            achievements.map((a) =>
+              h(
+                'div',
+                {
+                  key: a.id,
+                  className: 'tsl-ach' + (a.unlocked ? ' tsl-ach-on' : ''),
+                  title: tr('ach.' + a.id + '.desc'),
+                  'data-ach': a.id,
+                  'data-unlocked': a.unlocked ? '1' : '0',
+                },
+                h('span', { className: 'tsl-ach-icon' }, a.icon),
+                h('span', { className: 'tsl-ach-name' }, tr('ach.' + a.id + '.name')),
+                h('span', { className: 'tsl-ach-bar' }, h(Bar, { value: a.progress, color: a.unlocked ? accent : 'var(--dsw-alias-border-l2, #c5c5c5)', height: 2 })),
+              ),
+            ),
+          ),
+        );
+
         panel = h(
           'div',
           { className: 'tsl-panel', role: 'dialog', 'aria-label': tr('panel.title') },
@@ -1188,11 +1527,13 @@ window.__ModuleLoader__.load({
           ),
           statChips,
           nextMeal,
+          stageLadder,
           breedRow,
           colonyRow,
           toolRows,
           dietBlock,
           traitRow,
+          achShelf,
           openColony !== null
             ? h(
                 'button',
@@ -1284,6 +1625,8 @@ window.__ModuleLoader__.load({
       const total = data !== null && data.total !== undefined ? data.total : null;
       const sessions = data !== null && Array.isArray(data.sessions) ? data.sessions : [];
       const totalColony = colonyOf(total === null ? 0 : total.food);
+      const totalStage = stageOf(total === null ? 0 : total.food);
+      const sessionCount = total === null ? 0 : num(total.sessions);
       const totalBreed = total === null ? null : total.species;
       const totalHue = totalBreed !== null && TOOL_HUES[totalBreed] !== undefined ? TOOL_HUES[totalBreed] : 150;
       const toolTotal = total === null ? 0 : num(total.toolCalls);
@@ -1302,6 +1645,7 @@ window.__ModuleLoader__.load({
               progress: totalColony.progress,
               hat: totalBreed,
               rings: total === null ? 0 : total.compactions,
+              stage: totalStage.index,
               species: totalBreed === null ? 'species.moss' : 'species.' + totalBreed,
             }),
           ),
@@ -1316,7 +1660,7 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { style: { fontSize: 10.5, color: 'var(--dsw-alias-label-secondary, #6b6b6b)' } },
-              tr('colony.generations') + ' ' + String(totalColony.gen) + ' · ' + tr('colony.sessions') + ' ' + String(total === null ? 0 : total.sessions),
+              tr('stage.' + totalStage.key) + ' · ' + tr('colony.generations') + ' ' + String(totalColony.gen),
             ),
             h('span', { style: { width: 120 } }, h(Bar, { value: totalColony.progress, color: 'hsl(' + totalHue + ' 62% 46%)', height: 3 })),
           ),
@@ -1353,7 +1697,12 @@ window.__ModuleLoader__.load({
           ? h(
               'div',
               { className: 'tsl-colony-section' },
-              h('div', { className: 'tsl-colony-section-title' }, tr('colony.top')),
+              h(
+                'div',
+                { className: 'tsl-colony-section-title' },
+                tr('colony.allSessions') + ' · ' + String(sessions.length),
+              ),
+              h('div', { className: 'tsl-colony-list' },
               sessions.map((session, index) =>
                 h(
                   'div',
@@ -1383,6 +1732,7 @@ window.__ModuleLoader__.load({
                   ),
                 ),
               ),
+              ),
             )
           : h('div', { className: 'tsl-colony-empty' }, tr('colony.empty'));
 
@@ -1402,7 +1752,16 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'tsl-colony-head' },
-          h('h2', { className: 'tsl-colony-title' }, tr('colony.title')),
+          h(
+            'div',
+            { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
+            h('h2', { className: 'tsl-colony-title' }, tr('colony.title')),
+            h(
+              'span',
+              { className: 'tsl-colony-count', 'data-session-count': String(sessionCount) },
+              tr('colony.totalSessions').replace('{n}', String(sessionCount)),
+            ),
+          ),
           h(
             'button',
             {
@@ -1497,6 +1856,11 @@ window.__ModuleLoader__.load({
         diet: dietOf,
         breed: breedOf,
         ringsOf,
+        STAGES,
+        stageOf,
+        ACHIEVEMENTS,
+        achieveState,
+        nextGoal,
       },
     };
   },

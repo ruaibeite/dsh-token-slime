@@ -414,4 +414,41 @@ await testAsync('repeated polls reuse the short-lived aggregate cache', async ()
   assert.equal(listCalls, 1, 'second poll inside the TTL must not list again')
 })
 
+await testAsync('colony covers EVERY stored + live session with no cap and no double count', async () => {
+  // 60 stored sessions (mix of v3-style and v4-style ids), plus 3 live sessions
+  // of which one is also stored (must be deduped, not double counted).
+  const storedIds = []
+  const listed = []
+  for (let i = 0; i < 60; i += 1) {
+    const id = (i % 2 === 0 ? 'session-' : '') + '00000000-0000-4000-8000-' + String(i).padStart(12, '0')
+    storedIds.push(id)
+    listed.push(header(id, '/work/w' + i))
+  }
+  const overlapId = storedIds[0]
+  const liveOnlyA = 'live-only-a'
+  const liveOnlyB = 'live-only-b'
+  const liveSessions = [{ id: overlapId }, { id: liveOnlyA }, { id: liveOnlyB }]
+  const sessionsMap = new Map(liveSessions.map((s) => [s.id, s]))
+  const ctx = fakeContext({ sessions: sessionsMap, listed })
+  ctx.sessions.list = () => liveSessions
+  ctx.sessions.get = (id) => sessionsMap.get(id)
+
+  apply(ctx)
+  await Promise.resolve()
+  const response = fakeResponse()
+  await ctx.__routes[0].handler({ method: 'GET' }, response)
+  assert.equal(response.status, 200)
+  const payload = JSON.parse(response.body)
+
+  const expectedCount = 60 + 2 // 60 stored + 2 live-only (overlap deduped)
+  assert.equal(payload.total.sessions, expectedCount, 'total.sessions is the full, uncapped, deduped count')
+  assert.equal(payload.sessions.length, expectedCount, 'every session is carried as a row (no display cap drops sessions)')
+
+  const ids = new Set(payload.sessions.map((r) => r.id))
+  assert.equal(ids.size, expectedCount, 'no duplicate rows')
+  for (const id of storedIds) assert.ok(ids.has(id), 'stored session missing: ' + id)
+  assert.ok(ids.has(liveOnlyA) && ids.has(liveOnlyB), 'live-only sessions missing')
+  assert.equal(payload.sessions.filter((r) => r.id === overlapId).length, 1, 'overlap counted once')
+})
+
 console.log(`\n${passed} host tests passed`)

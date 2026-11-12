@@ -1,8 +1,8 @@
 {
   "name": "@ruaibeite/dsh-token-slime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
-  "description": "A composer slime that grows on the tokens your agent writes, splits into a colony, wears a breed hat from the tool mix, molts on every context compaction, and totals the colony across sessions in a right-sidebar tab.",
+  "description": "A composer slime that grows through life stages on the tokens your agent writes, splits into a colony, wears a breed hat from the tool mix, molts on every compaction, earns achievements, and totals the colony across every session in a right-sidebar tab.",
   "license": "MIT",
   "exports": {
     ".": "./index.js",

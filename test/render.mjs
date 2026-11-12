@@ -99,9 +99,17 @@ function walk(nodes, out) {
     if (node.props['data-hat'] !== undefined) out.hats.push(String(node.props['data-hat']))
     if (node.props['data-molt'] !== undefined) out.molts.push(String(node.props['data-molt']))
     if (node.props['data-rings'] !== undefined) out.ringAttrs.push(String(node.props['data-rings']))
+    if (node.props['data-session-count'] !== undefined) out.sessionCounts.push(String(node.props['data-session-count']))
+    if (node.props['data-stage'] !== undefined) out.stages.push(String(node.props['data-stage']))
+    if (node.props['data-ach'] !== undefined) out.achievements.push({ id: String(node.props['data-ach']), unlocked: node.props['data-unlocked'] === '1' })
     if (node.props.style && typeof node.props.style === 'object') out.styles.push(node.props.style)
     walk(node.children, out)
   }
+}
+
+/** A fresh render-output accumulator with every collected channel. */
+function newOut() {
+  return { text: [], tags: [], classes: [], labels: [], species: [], hats: [], molts: [], ringAttrs: [], sessionCounts: [], stages: [], achievements: [], styles: [] }
 }
 
 /** Load client.js in a sandbox and return its module exports plus runtime. */
@@ -217,7 +225,7 @@ async function mount(React, runtime, component, propsSteps, options = {}) {
     const moreSteps = pass + 1 < propsSteps.length
     if (!runtime.dirty && !moreSteps) break
   }
-  const out = { text: [], tags: [], classes: [], labels: [], species: [], hats: [], molts: [], ringAttrs: [], styles: [] }
+  const out = newOut()
   walk(tree, out)
   out.joined = out.text.join(' ')
   out.cleanup = () => {
@@ -326,7 +334,7 @@ await test('adult panel shows rings, tools, diet, and the colony entry point', a
 /** Mount a component, call its first button onClick, and render again. */
 async function clickOpen(runtime, component, props) {
   let tree = null
-  const out = { text: [], tags: [], classes: [], labels: [], species: [], hats: [], molts: [], ringAttrs: [], styles: [] }
+  const out = newOut()
   runtime.cursor = 0
   runtime.effects = []
   runtime.dirty = false
@@ -432,7 +440,9 @@ await test('a new compaction molts a shell and adds a ring', async () => {
   const out = await mount(runtime.React, runtime, dock.component, [before, after])
   out.cleanup()
   assert.equal(out.ringAttrs.includes('2'), true, 'ring attribute tracks compactions')
-  assert.ok(out.joined.includes('蜕皮！'), 'the molt banner is shown when compactions increase')
+  // A compaction raises the molt banner and/or unlocks a molt achievement; the
+  // achievement celebration takes priority on the single dock feedback line.
+  assert.ok(out.joined.includes('蜕皮！') || out.joined.includes('🏆'), 'a molt/achievement celebration is shown when compactions increase')
 })
 
 await test('existing compactions render rings without a stale banner after settling', async () => {
@@ -539,10 +549,24 @@ await test('colony panel renders totals, breeds, and sessions from the route', a
   out.cleanup()
   assert.ok(fetchCalls.length >= 1)
   assert.ok(fetchCalls[0].endsWith(moduleExports.__model.COLONY_ROUTE), 'fetches the colony route')
-  for (const needle of ['总族群', '累计食物', '累计年轮', '会话', '品种比例', '最肥的会话', '重构插件', '未命名会话', '工装种']) {
+  for (const needle of ['总族群', '累计食物', '累计年轮', '会话', '品种比例', '全部会话', '重构插件', '未命名会话', '工装种', '共 3 个会话']) {
     assert.ok(out.joined.includes(needle), 'missing colony text: ' + needle)
   }
   assert.equal(out.hats.includes('engineer'), true, 'hero slime wears the colony breed')
+})
+
+await test('colony panel headline session count equals the route total (verification)', async () => {
+  // A larger, realistic total: the panel must surface exactly this number so a
+  // user can reconcile it against the host's real session count.
+  const big = { ...COLONY_PAYLOAD, total: { ...COLONY_PAYLOAD.total, sessions: 178 } }
+  const { moduleExports, runtime } = loadClient({ payload: big })
+  const { ctx, slotRegistrations } = fakeClientContext()
+  moduleExports.apply(ctx)
+  const body = findRegistration(slotRegistrations, 'sidebar.right.pane.tab')
+  const out = await mount(runtime.React, runtime, body.component, [{ t: undefined }])
+  out.cleanup()
+  assert.ok(out.joined.includes('共 178 个会话'), 'headline shows the full session total')
+  assert.ok(out.sessionCounts.includes('178'), 'data-session-count carries the exact total')
 })
 
 await test('colony panel shows an error row when the route fails', async () => {
@@ -558,6 +582,106 @@ await test('colony panel shows an error row when the route fails', async () => {
   assert.ok(out.joined.includes('503'))
 })
 
+// ------------------------------------------- life stages & achievements
+await test('stageOf resolves the six named stages at their thresholds', () => {
+  const { moduleExports } = loadClient()
+  const m = moduleExports.__model
+  const cases = [[0, 'egg'], [1, 'hatchling'], [2499, 'hatchling'], [2500, 'juvenile'], [25000, 'adult'], [120000, 'elder'], [600000, 'mythic'], [5000000, 'mythic']]
+  for (const [food, key] of cases) assert.equal(m.stageOf(food).key, key, 'stage at food=' + food)
+  assert.equal(m.stageOf(600000).next, null, 'mythic is terminal')
+  assert.equal(m.stageOf(600000).progress, 1)
+  assert.ok(m.stageOf(2500).toNext > 0, 'non-terminal stage reports distance to next')
+  assert.equal(m.STAGES.length, 6)
+})
+
+await test('achieveState unlocks exactly the milestones whose target is met', () => {
+  const { moduleExports } = loadClient()
+  const m = moduleExports.__model
+  const ctx = {
+    buckets: { output: 30000, prompt: 100000, total: 130000, cacheRead: 80000 },
+    counts: { engineer: 30, explorer: 15, scribe: 10, scholar: 30, other: 0 },
+    compactions: 3,
+    colony: m.colonyOf(30000),
+    stage: m.stageOf(30000),
+    diet: { cacheRatio: 0.8 },
+  }
+  const ach = m.achieveState(ctx)
+  assert.equal(ach.length, m.ACHIEVEMENTS.length)
+  const byId = new Map(ach.map((a) => [a.id, a]))
+  for (const id of ['firstMeal', 'firstSplit', 'engineer30', 'explorer15', 'scribe10', 'scholar30', 'polyglot', 'firstMolt', 'rings3', 'cacheMaster']) {
+    assert.equal(byId.get(id).unlocked, true, id + ' should be unlocked')
+  }
+  for (const id of ['colony5', 'marathon', 'million', 'mythicForm']) {
+    assert.equal(byId.get(id).unlocked, false, id + ' should still be locked')
+  }
+  // cacheMaster needs a real prompt; with prompt 0 it must stay locked.
+  const noPrompt = m.achieveState({ ...ctx, buckets: { ...ctx.buckets, prompt: 0 } })
+  assert.equal(noPrompt.find((a) => a.id === 'cacheMaster').unlocked, false)
+  // nextGoal picks the locked achievement with the highest progress.
+  const goal = m.nextGoal(ach)
+  assert.ok(goal !== null && !goal.unlocked)
+  assert.ok(ach.filter((a) => !a.unlocked).every((a) => a.progress <= goal.progress))
+})
+
+await test('dock shows the current life stage and the panel shows a stage ladder', async () => {
+  const projections = projectionsWith({}, { tokenUsage: { uncachedInputTokens: 1000, outputTokens: 30000, cacheReadTokens: 1000, cacheWriteTokens: 0 } })
+  const opened = await renderOpen(projections)
+  assert.ok(opened.stages.includes('adult'), 'slime art carries the adult stage')
+  assert.ok(opened.joined.includes('成长阶段'), 'panel shows the stage section')
+  assert.ok(opened.joined.includes('成体'), 'current stage name shown')
+  assert.ok(opened.joined.includes('长老'), 'next stage name shown')
+})
+
+await test('a stage-up raises the evolution banner', async () => {
+  const { moduleExports, runtime } = loadClient()
+  const { ctx, slotRegistrations } = fakeClientContext()
+  moduleExports.apply(ctx)
+  const dock = findRegistration(slotRegistrations, 'conversation.composer.dock')
+  const low = { uncachedInputTokens: 100, outputTokens: 2000, cacheReadTokens: 100, cacheWriteTokens: 0 }
+  const high = { uncachedInputTokens: 100, outputTokens: 3000, cacheReadTokens: 100, cacheWriteTokens: 0 }
+  const before = dockProps(projectionsWith({}, { tokenUsage: low }))
+  const after = dockProps(projectionsWith({}, { tokenUsage: high }))
+  const out = await mount(runtime.React, runtime, dock.component, [before, after])
+  out.cleanup()
+  assert.ok(out.joined.includes('进化！'), 'evolution banner shown on stage-up')
+})
+
+await test('unlocking an achievement raises the trophy banner', async () => {
+  const { moduleExports, runtime } = loadClient()
+  const { ctx, slotRegistrations } = fakeClientContext()
+  moduleExports.apply(ctx)
+  const dock = findRegistration(slotRegistrations, 'conversation.composer.dock')
+  const before = dockProps(projectionsWith({ toolCalls: 29, tools: { engineer: 29, explorer: 0, scribe: 0, scholar: 0, other: 0 } }))
+  const after = dockProps(projectionsWith({ toolCalls: 30, tools: { engineer: 30, explorer: 0, scribe: 0, scholar: 0, other: 0 } }))
+  const out = await mount(runtime.React, runtime, dock.component, [before, after])
+  out.cleanup()
+  assert.ok(out.joined.includes('🏆'), 'trophy banner shown on unlock')
+  assert.ok(out.joined.includes('代码工匠'), 'the unlocked achievement is named')
+})
+
+await test('achievement shelf lists every milestone and marks unlocked ones', async () => {
+  const projections = projectionsWith({ toolCalls: 30, tools: { engineer: 30, explorer: 0, scribe: 0, scholar: 0, other: 0 } })
+  const opened = await renderOpen(projections)
+  assert.equal(opened.achievements.length, 14, 'all 14 achievements on the shelf')
+  const eng = opened.achievements.find((a) => a.id === 'engineer30')
+  assert.ok(eng && eng.unlocked, 'engineer30 marked unlocked')
+  const million = opened.achievements.find((a) => a.id === 'million')
+  assert.ok(million && !million.unlocked, 'million still locked')
+  assert.ok(opened.joined.includes('成就'), 'achievements section header present')
+})
+
+await test('dock shows a next-goal hint for the closest locked achievement', async () => {
+  const { moduleExports, runtime } = loadClient()
+  const { ctx, slotRegistrations } = fakeClientContext()
+  moduleExports.apply(ctx)
+  const dock = findRegistration(slotRegistrations, 'conversation.composer.dock')
+  const empty = projectionsWith({}, { tokenUsage: { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } })
+  const out = await mount(runtime.React, runtime, dock.component, [dockProps(empty)])
+  out.cleanup()
+  assert.ok(out.joined.includes('🎯'), 'goal hint present on a fresh egg')
+  assert.ok(out.joined.includes('破壳而出'), 'closest goal is the first meal')
+})
+
 // -------------------------------------------------- locale resources
 await test('locale files carry every key the widget can render', () => {
   for (const [file, fallbackTable] of [
@@ -567,8 +691,16 @@ await test('locale files carry every key the widget can render', () => {
     const json = JSON.parse(fs.readFileSync(new URL(file, LOCALE_DIR), 'utf8'))
     assert.equal(typeof json.meta.title, 'string')
     assert.equal(typeof json.meta.description, 'string')
-    for (const key of ['panel.title', 'panel.rings', 'panel.tools', 'panel.openColony', 'flash.molt', 'colony.title', 'colony.tab', 'species.engineer', 'species.explorer', 'species.scribe', 'species.scholar']) {
+    for (const key of ['panel.title', 'panel.rings', 'panel.tools', 'panel.openColony', 'flash.molt', 'colony.title', 'colony.tab', 'species.engineer', 'species.explorer', 'species.scribe', 'species.scholar', 'stage.adult', 'stage.mythic', 'panel.stage', 'panel.achievements', 'goal.hint', 'flash.evolve', 'colony.totalSessions', 'colony.allSessions', 'ach.million.name', 'ach.mythicForm.desc']) {
       assert.equal(typeof json[key], 'string', file + ' is missing ' + key)
+    }
+    // Every achievement and stage the widget can render must have locale copy.
+    for (const id of ['firstMeal', 'firstSplit', 'colony5', 'engineer30', 'explorer15', 'scribe10', 'scholar30', 'polyglot', 'firstMolt', 'rings3', 'marathon', 'million', 'cacheMaster', 'mythicForm']) {
+      assert.equal(typeof json['ach.' + id + '.name'], 'string', file + ' missing ach.' + id + '.name')
+      assert.equal(typeof json['ach.' + id + '.desc'], 'string', file + ' missing ach.' + id + '.desc')
+    }
+    for (const s of ['egg', 'hatchling', 'juvenile', 'adult', 'elder', 'mythic']) {
+      assert.equal(typeof json['stage.' + s], 'string', file + ' missing stage.' + s)
     }
     assert.ok(json.meta.title.length > 0)
     assert.equal(typeof json['panel.tool.engineer'], 'string', file + ' tool label')

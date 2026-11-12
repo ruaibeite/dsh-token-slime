@@ -34,8 +34,14 @@ export const FIRST_SPLIT = 4000
 export const GROWTH = 1.7
 export const MAX_GEN = 9
 
-/** How many session rows the colony payload carries. */
-const MAX_SESSIONS = 40
+/**
+ * Safety valve on the number of session rows carried in one payload. The
+ * colony is meant to cover EVERY session the host knows about (all stored
+ * sessions from `sessionPersistence.list()` plus live ones), so this is set
+ * far above any realistic session count and only guards against a pathological
+ * store. `total.sessions` always reports the full, uncapped count.
+ */
+const MAX_SESSIONS = 100000
 
 /** Cache the aggregate briefly: the panel polls, and listing stats every time is wasteful. */
 const COLONY_TTL_MS = 8000
